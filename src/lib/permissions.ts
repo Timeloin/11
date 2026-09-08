@@ -1,0 +1,117 @@
+import { Role, CustomPermissions } from '@/types';
+
+export const DEFAULT_ROLE_PERMISSIONS: Record<Role, CustomPermissions> = {
+  admin: {
+    canCreateItem: true,
+    canEditItem: true,
+    canDeleteItem: true,
+    canViewCostPrice: true,
+    canStockIn: true,
+    canStockOut: true,
+    canMoveStock: true,
+    canAdjustStock: true,
+    canCreatePurchase: true,
+    canCreateSale: true,
+    canCreateReturn: true,
+    canInventoryCount: true,
+    canManageMembers: true,
+    canManageLocations: true,
+    canExportData: true,
+    canViewAuditLogs: true,
+    canViewReports: true,
+  },
+  manager: {
+    canCreateItem: true,
+    canEditItem: true,
+    canDeleteItem: false,
+    canViewCostPrice: true,
+    canStockIn: true,
+    canStockOut: true,
+    canMoveStock: true,
+    canAdjustStock: true,
+    canCreatePurchase: true,
+    canCreateSale: true,
+    canCreateReturn: true,
+    canInventoryCount: true,
+    canManageMembers: false,
+    canManageLocations: true,
+    canExportData: true,
+    canViewAuditLogs: false,
+    canViewReports: true,
+  },
+  sales: {
+    canCreateItem: false,
+    canEditItem: false,
+    canDeleteItem: false,
+    canViewCostPrice: false,
+    canStockIn: false,
+    canStockOut: true,
+    canMoveStock: false,
+    canAdjustStock: false,
+    canCreatePurchase: false,
+    canCreateSale: true,
+    canCreateReturn: true,
+    canInventoryCount: false,
+    canManageMembers: false,
+    canManageLocations: false,
+    canExportData: false,
+    canViewAuditLogs: false,
+    canViewReports: false,
+  },
+  inventory: {
+    canCreateItem: true,
+    canEditItem: true,
+    canDeleteItem: false,
+    canViewCostPrice: false,
+    canStockIn: true,
+    canStockOut: true,
+    canMoveStock: true,
+    canAdjustStock: true,
+    canCreatePurchase: false,
+    canCreateSale: false,
+    canCreateReturn: false,
+    canInventoryCount: true,
+    canManageMembers: false,
+    canManageLocations: false,
+    canExportData: false,
+    canViewAuditLogs: false,
+    canViewReports: false,
+  },
+  viewer: {
+    canCreateItem: false,
+    canEditItem: false,
+    canDeleteItem: false,
+    canViewCostPrice: false,
+    canStockIn: false,
+    canStockOut: false,
+    canMoveStock: false,
+    canAdjustStock: false,
+    canCreatePurchase: false,
+    canCreateSale: false,
+    canCreateReturn: false,
+    canInventoryCount: false,
+    canManageMembers: false,
+    canManageLocations: false,
+    canExportData: false,
+    canViewAuditLogs: false,
+    canViewReports: false,
+  },
+};
+
+export function resolvePermissions(role: Role, customOverrides?: CustomPermissions): CustomPermissions {
+  const defaults = DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS.viewer;
+  if (!customOverrides) return defaults;
+  return {
+    ...defaults,
+    ...customOverrides,
+  };
+}
+
+export function hasPermission(
+  role: Role = 'viewer',
+  permissionKey: keyof CustomPermissions,
+  customOverrides?: CustomPermissions
+): boolean {
+  const effective = resolvePermissions(role, customOverrides);
+  return !!effective[permissionKey];
+}
