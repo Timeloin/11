@@ -1,6 +1,25 @@
 import { Role, CustomPermissions } from '@/types';
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, CustomPermissions> = {
+  superadmin: {
+    canCreateItem: true,
+    canEditItem: true,
+    canDeleteItem: true,
+    canViewCostPrice: true,
+    canStockIn: true,
+    canStockOut: true,
+    canMoveStock: true,
+    canAdjustStock: true,
+    canCreatePurchase: true,
+    canCreateSale: true,
+    canCreateReturn: true,
+    canInventoryCount: true,
+    canManageMembers: true,
+    canManageLocations: true,
+    canExportData: true,
+    canViewAuditLogs: true,
+    canViewReports: true,
+  },
   admin: {
     canCreateItem: true,
     canEditItem: true,

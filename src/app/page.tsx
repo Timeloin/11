@@ -14,9 +14,20 @@ import { StockActionModal } from '@/components/modals/StockActionModal';
 import { NewTeamModal } from '@/components/modals/NewTeamModal';
 import { InviteMemberModal } from '@/components/modals/InviteMemberModal';
 import { ItemDetailModal } from '@/components/modals/ItemDetailModal';
-import { IItem, ILocation, IStockTransaction, ITeam, ITeamMember, TransactionType } from '@/types';
+import { LoginScreen } from '@/components/LoginScreen';
+import { SuperAdminDashboard } from '@/components/SuperAdminDashboard';
+import { AccessExpiredScreen } from '@/components/AccessExpiredScreen';
+import { IItem, ILocation, IStockTransaction, ITeam, ITeamMember, TransactionType, UserSession } from '@/types';
 
 export default function App() {
+  const [session, setSession] = useState<UserSession | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [accessDeniedReason, setAccessDeniedReason] = useState<string | null>(null);
+
+  // Super admin viewing specific shop mode
+  const [viewingShopTeamId, setViewingShopTeamId] = useState<string | null>(null);
+
+  // App Tabs & Navigation
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -35,7 +46,7 @@ export default function App() {
     stockInToday: 0,
     stockOutToday: 0,
     lowStockCount: 0,
-    todayDateStr: 'Sep 8',
+    todayDateStr: 'Sep 14',
   });
 
   // Modals state
@@ -55,21 +66,57 @@ export default function App() {
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<IItem | null>(null);
   const [scannedBarcodeForNewItem, setScannedBarcodeForNewItem] = useState<string | undefined>();
 
-  // Fetch initial data
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('inventory_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setSession(parsed);
+      }
+    } catch (e) {}
+    setIsAuthChecking(false);
+  }, []);
+
+  const handleLoginSuccess = (userSession: UserSession, token: string) => {
+    setSession(userSession);
+    setAccessDeniedReason(null);
+    try {
+      localStorage.setItem('inventory_session', JSON.stringify(userSession));
+      localStorage.setItem('inventory_token', token);
+    } catch (e) {}
+  };
+
+  const handleLogout = () => {
+    setSession(null);
+    setViewingShopTeamId(null);
+    setAccessDeniedReason(null);
+    try {
+      localStorage.removeItem('inventory_session');
+      localStorage.removeItem('inventory_token');
+    } catch (e) {}
+  };
+
+  // Fetch shop inventory data
   const loadData = useCallback(async () => {
+    if (!session) return;
     try {
       const teamsRes = await fetch('/api/teams').then((r) => r.json());
-      let activeTeam = currentTeam;
+      let targetTeam = currentTeam;
 
       if (teamsRes.success && teamsRes.teams?.length > 0) {
         setTeams(teamsRes.teams);
-        if (!activeTeam) {
-          activeTeam = teamsRes.teams[0];
-          setCurrentTeam(teamsRes.teams[0]);
+        if (viewingShopTeamId) {
+          targetTeam = teamsRes.teams.find((t: ITeam) => t._id === viewingShopTeamId) || teamsRes.teams[0];
+        } else if (session.activeTeamId) {
+          targetTeam = teamsRes.teams.find((t: ITeam) => t._id === session.activeTeamId) || teamsRes.teams[0];
+        } else if (!targetTeam) {
+          targetTeam = teamsRes.teams[0];
         }
+        setCurrentTeam(targetTeam);
       }
 
-      const activeTeamId = activeTeam?._id || 'team_1';
+      const activeTeamId = targetTeam?._id || session.activeTeamId || 'team_1';
       const [metricsRes, itemsRes, locsRes, txnsRes, memRes] = await Promise.all([
         fetch('/api/metrics?teamId=' + activeTeamId).then((r) => r.json()),
         fetch('/api/items?teamId=' + activeTeamId).then((r) => r.json()),
@@ -90,27 +137,31 @@ export default function App() {
     } catch (e) {
       console.error('Error loading data:', e);
     }
-  }, [currentTeam]);
+  }, [session, currentTeam, viewingShopTeamId]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (session && (!session.isSuperAdmin || viewingShopTeamId)) {
+      loadData();
+    }
+  }, [session, viewingShopTeamId, loadData]);
 
   // Handlers
   const handleSaveItem = async (itemData: any) => {
+    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
     await fetch('/api/items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...itemData, teamId: currentTeam?._id || 'team_1' }),
+      body: JSON.stringify({ ...itemData, teamId: activeTeamId }),
     });
     await loadData();
   };
 
   const handleExecuteTransaction = async (txnData: any) => {
+    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
     await fetch('/api/transactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...txnData, teamId: currentTeam?._id || 'team_1' }),
+      body: JSON.stringify({ ...txnData, teamId: activeTeamId }),
     });
     await loadData();
   };
@@ -143,20 +194,22 @@ export default function App() {
     }
   };
 
-  const handleInviteMember = async (memberData: any) => {
+  const handleAddMember = async (memberData: any) => {
+    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
     await fetch('/api/members', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...memberData, teamId: currentTeam?._id || 'team_1' }),
+      body: JSON.stringify({ ...memberData, teamId: activeTeamId }),
     });
     await loadData();
   };
 
   const handleAddLocation = async (name: string) => {
+    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
     await fetch('/api/locations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, teamId: currentTeam?._id || 'team_1' }),
+      body: JSON.stringify({ name, teamId: activeTeamId }),
     });
     await loadData();
   };
@@ -183,7 +236,6 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // Stock action triggers
   const openStockModal = (type: TransactionType, item: IItem | null = null) => {
     setStockModalConfig({
       isOpen: true,
@@ -192,7 +244,40 @@ export default function App() {
     });
   };
 
-  // Reactive metric calculations
+  // 1. Initial auth loading state
+  if (isAuthChecking) {
+    return <div className="min-h-screen bg-[#f3f4f8] flex items-center justify-center text-xs text-gray-400">Loading app...</div>;
+  }
+
+  // 2. Access Denied / Expired Screen
+  if (accessDeniedReason) {
+    return <AccessExpiredScreen reason={accessDeniedReason} onLogout={handleLogout} />;
+  }
+
+  // 3. Not Logged In -> Show Login Screen FIRST
+  if (!session) {
+    return (
+      <LoginScreen
+        onLoginSuccess={handleLoginSuccess}
+        onAccessDenied={(reason) => setAccessDeniedReason(reason)}
+      />
+    );
+  }
+
+  // 4. Super Admin Mode -> Show Super Admin Dashboard (unless viewing specific shop)
+  if (session.isSuperAdmin && !viewingShopTeamId) {
+    return (
+      <SuperAdminDashboard
+        session={session}
+        onLogout={handleLogout}
+        onSwitchToShop={(teamId) => {
+          setViewingShopTeamId(teamId);
+        }}
+      />
+    );
+  }
+
+  // 5. Main Shop Inventory App View
   const todayStr = new Date().toISOString().split('T')[0];
   const liveStockInToday = transactions
     .filter((t) => (t.type === 'stock_in' || t.type === 'purchase') && t.createdAt && new Date(t.createdAt).toISOString().startsWith(todayStr))
@@ -209,7 +294,10 @@ export default function App() {
         {/* Header */}
         <Header
           currentTeam={currentTeam}
+          session={session}
           onOpenTeamModal={() => setIsTeamModalOpen(true)}
+          onLogout={handleLogout}
+          onBackToAdmin={session.isSuperAdmin ? () => setViewingShopTeamId(null) : undefined}
         />
 
         {/* Home Metric Banner (only on Home tab) */}
@@ -353,7 +441,7 @@ export default function App() {
         <InviteMemberModal
           isOpen={isInviteOpen}
           onClose={() => setIsInviteOpen(false)}
-          onInvite={handleInviteMember}
+          onInvite={handleAddMember}
         />
       </div>
     </div>

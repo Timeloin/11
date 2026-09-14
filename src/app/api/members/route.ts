@@ -9,17 +9,23 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const teamId = body.teamId || 'team_1';
-  if (!body.name || !body.email) return NextResponse.json({ error: 'Name and email are required' }, { status: 400 });
+  try {
+    const body = await req.json();
+    const teamId = body.teamId || 'team_1';
+    if (!body.name || !body.email || !body.password) {
+      return NextResponse.json({ error: 'Name, email and password are required for new staff members' }, { status: 400 });
+    }
 
-  const member = await InventoryStore.inviteMember(teamId, body.name, body.email, body.role || 'sales', body.customPermissions);
-  return NextResponse.json({ success: true, member });
-}
+    const member = await InventoryStore.addMemberWithCredentials(teamId, {
+      name: body.name,
+      email: body.email,
+      password: body.password,
+      role: body.role || 'sales',
+      customPermissions: body.customPermissions,
+    });
 
-export async function PUT(req: Request) {
-  const body = await req.json();
-  if (!body.memberId || !body.role) return NextResponse.json({ error: 'Member ID and role required' }, { status: 400 });
-  const updated = await InventoryStore.updateMemberRole(body.memberId, body.role, body.customPermissions);
-  return NextResponse.json({ success: true, member: updated });
+    return NextResponse.json({ success: true, member });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }

@@ -15,6 +15,7 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('sales');
   const [customPerms, setCustomPerms] = useState<CustomPermissions>({
     canAdjustStock: false,
@@ -27,12 +28,13 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return;
+    if (!name || !email || !password) return;
     setLoading(true);
     try {
       await onInvite({
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim(),
+        password: password.trim(),
         role,
         customPermissions: customPerms,
       });
@@ -50,7 +52,7 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
         <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
           <div className="flex items-center space-x-2">
             <UserPlus className="w-5 h-5 text-blue-600" />
-            <h1 className="font-bold text-gray-900 text-lg">Invite Team Member</h1>
+            <h1 className="font-bold text-gray-900 text-lg">Add Staff Member</h1>
           </div>
           <button onClick={onClose} className="p-1 rounded-full text-gray-500 hover:bg-gray-100">
             <X className="w-5 h-5" />
@@ -60,29 +62,43 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
-              Member Name
+              Member Full Name
             </label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. John Doe"
+              placeholder="e.g. Rahul Sharma"
               className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
-              Email Address
+              Staff Login Email
             </label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. member@shop.com"
+              placeholder="e.g. rahul@shop.com"
               className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
+              Staff Login Password
+            </label>
+            <input
+              type="text"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="e.g. staffPass@123"
+              className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
             />
           </div>
 

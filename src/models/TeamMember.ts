@@ -3,10 +3,13 @@ import mongoose, { Schema } from 'mongoose';
 const TeamMemberSchema = new Schema({
   teamId: { type: Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  name: { type: String, required: true },
+  email: { type: String, required: true },
+  password: { type: String },
   role: { 
     type: String, 
-    enum: ['admin', 'manager', 'sales', 'inventory', 'viewer'], 
-    default: 'viewer' 
+    enum: ['superadmin', 'admin', 'manager', 'sales', 'inventory', 'viewer'], 
+    default: 'sales' 
   },
   customPermissions: { type: Schema.Types.Mixed, default: {} },
   status: { type: String, enum: ['active', 'invited', 'suspended'], default: 'active' },

@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'manager' | 'sales' | 'inventory' | 'viewer';
+export type Role = 'superadmin' | 'admin' | 'manager' | 'sales' | 'inventory' | 'viewer';
 
 export interface CustomPermissions {
   canCreateItem?: boolean;
@@ -26,7 +26,15 @@ export interface UserSession {
   email: string;
   activeTeamId?: string;
   role?: Role;
+  isSuperAdmin?: boolean;
   permissions?: CustomPermissions;
+  subscription?: {
+    type: 'days' | 'lifetime';
+    expiresAt?: string;
+    isRevoked: boolean;
+    daysRemaining?: number;
+    isValid: boolean;
+  };
 }
 
 export interface ILocation {
@@ -109,6 +117,7 @@ export interface ITeamMember {
   userId: string;
   name: string;
   email: string;
+  password?: string;
   role: Role;
   customPermissions?: CustomPermissions;
   status: 'active' | 'invited' | 'suspended';
@@ -119,59 +128,30 @@ export interface ITeam {
   _id: string;
   name: string;
   ownerId: string;
+  ownerEmail?: string;
+  ownerName?: string;
   inviteCode: string;
   currency: string;
   lowStockThresholdDefault: number;
+  subscriptionType: 'days' | 'lifetime';
+  subscriptionDays?: number;
+  subscriptionExpiresAt?: string;
+  isAccessRevoked: boolean;
   createdAt: string;
 }
 
-export interface IPurchase {
-  _id: string;
-  teamId: string;
-  invoiceNo: string;
-  supplierName: string;
-  locationId: string;
-  locationName: string;
-  items: ITransactionItem[];
-  totalAmount: number;
-  status: 'received' | 'pending';
+export interface ISubAdminInfo {
   userId: string;
-  userName: string;
-  createdAt: string;
-}
-
-export interface ISale {
-  _id: string;
+  name: string;
+  email: string;
   teamId: string;
-  receiptNo: string;
-  customerName: string;
-  locationId: string;
-  locationName: string;
-  items: ITransactionItem[];
-  totalAmount: number;
-  paymentMethod: 'cash' | 'card' | 'upi' | 'other';
-  userId: string;
-  userName: string;
+  shopName: string;
+  subscriptionType: 'days' | 'lifetime';
+  subscriptionExpiresAt?: string;
+  isAccessRevoked: boolean;
+  daysRemaining: number;
+  isValid: boolean;
+  membersCount: number;
+  itemsCount: number;
   createdAt: string;
-}
-
-export interface IInventoryCount {
-  _id: string;
-  teamId: string;
-  locationId: string;
-  locationName: string;
-  status: 'in_progress' | 'completed' | 'applied';
-  countedItems: {
-    itemId: string;
-    name: string;
-    sku: string;
-    systemStock: number;
-    countedStock: number;
-    difference: number;
-  }[];
-  notes?: string;
-  userId: string;
-  userName: string;
-  createdAt: string;
-  completedAt?: string;
 }
