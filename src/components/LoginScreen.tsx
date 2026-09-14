@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, ShieldCheck, ArrowRight, Store, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Store, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { UserSession } from '@/types';
 
 interface LoginScreenProps {
@@ -10,6 +10,7 @@ interface LoginScreenProps {
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onAccessDenied }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,16 +46,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onAcce
     }
   };
 
-  const fillSuperAdmin = () => {
-    setEmail('harpreetsinghhappy7080@gmail.com');
-    setPassword('@Harpreet7518');
-  };
-
-  const fillSubAdmin = () => {
-    setEmail('subadmin@simranmobile.com');
-    setPassword('password123');
-  };
-
   return (
     <div className="min-h-screen bg-[#f3f4f8] flex flex-col justify-center items-center px-4 py-8">
       <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl border border-gray-100 p-6 space-y-6">
@@ -85,7 +76,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onAcce
               Email Address
             </label>
             <div className="relative flex items-center">
-              <Mail className="w-4 h-4 text-gray-400 absolute left-3.5" />
+              <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none" />
               <input
                 type="email"
                 required
@@ -102,50 +93,39 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onAcce
               Password
             </label>
             <div className="relative flex items-center">
-              <Lock className="w-4 h-4 text-gray-400 absolute left-3.5" />
+              <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-10 pr-3.5 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                placeholder="Enter password"
+                className="w-full pl-10 pr-11 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 p-1 text-gray-400 hover:text-gray-600 transition-colors focus:outline-none"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
             </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-[#4965fa] hover:bg-blue-600 active:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+            className="w-full py-3.5 bg-[#4965fa] hover:bg-blue-600 active:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-2 disabled:opacity-50 mt-2"
           >
             <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Quick Demo Credentials for Fast Testing */}
-        <div className="pt-2 border-t border-gray-100 space-y-2">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block text-center">
-            Quick Auto-Fill Credentials
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={fillSuperAdmin}
-              className="px-2.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold text-center border border-indigo-100 transition-colors"
-            >
-              👑 Main Super Admin
-            </button>
-            <button
-              type="button"
-              onClick={fillSubAdmin}
-              className="px-2.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold text-center border border-blue-100 transition-colors"
-            >
-              🏪 Sub-Admin (Shop)
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
