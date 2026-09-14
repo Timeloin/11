@@ -6,7 +6,7 @@ import Item from '@/models/Item';
 import StockTransaction from '@/models/StockTransaction';
 import TeamMember from '@/models/TeamMember';
 
-// Pre-seeded Memory State for fallback when MONGODB_URI is not configured
+// Fallback in-memory state when MONGODB_URI is absent
 let demoTeams: ITeam[] = [
   {
     _id: 'team_1',
@@ -35,14 +35,6 @@ let demoLocations: ILocation[] = [
     isDefault: false,
     isArchived: false,
     createdAt: new Date().toISOString(),
-  },
-  {
-    _id: 'loc_3',
-    teamId: 'team_1',
-    name: 'Back Warehouse',
-    isDefault: false,
-    isArchived: false,
-    createdAt: new Date().toISOString(),
   }
 ];
 
@@ -59,7 +51,7 @@ let demoItems: IItem[] = [
     costPrice: 1000,
     sellingPrice: 1500,
     minStock: 5,
-    barcodes: ['8901234567890', 'VIVO-V29-RED'],
+    barcodes: ['8901234567890'],
     images: [],
     stockByLocation: [
       { locationId: 'loc_1', locationName: 'Default Location', quantity: 12 },
@@ -67,52 +59,7 @@ let demoItems: IItem[] = [
     ],
     totalStock: 15,
     isArchived: false,
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    _id: 'item_2',
-    teamId: 'team_1',
-    sku: 'MOB-SAM-S24',
-    name: 'Samsung Galaxy S24 Ultra',
-    description: 'Flagship AI smartphone',
-    category: 'mobile phone',
-    brand: 'samsung',
-    unit: 'pcs',
-    costPrice: 85000,
-    sellingPrice: 119999,
-    minStock: 4,
-    barcodes: ['8806091234567'],
-    images: [],
-    stockByLocation: [
-      { locationId: 'loc_1', locationName: 'Default Location', quantity: 2 },
-    ],
-    totalStock: 2,
-    isArchived: false,
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    _id: 'item_3',
-    teamId: 'team_1',
-    sku: 'ACC-TEMP-UNIV',
-    name: '9D Tempered Glass Protector',
-    description: 'Edge-to-edge screen protection',
-    category: 'accessories',
-    brand: 'generic',
-    unit: 'pcs',
-    costPrice: 40,
-    sellingPrice: 150,
-    minStock: 20,
-    barcodes: ['6901234567891'],
-    images: [],
-    stockByLocation: [
-      { locationId: 'loc_1', locationName: 'Default Location', quantity: 80 },
-      { locationId: 'loc_2', locationName: 'Main Counter', quantity: 25 }
-    ],
-    totalStock: 105,
-    isArchived: false,
-    createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+    createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
 ];
@@ -132,7 +79,7 @@ let demoTransactions: IStockTransaction[] = [
     reason: 'Initial shipment arrival',
     userId: 'user_1',
     userName: 'Admin User',
-    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
+    createdAt: new Date().toISOString(),
   }
 ];
 
@@ -146,33 +93,20 @@ let demoMembers: ITeamMember[] = [
     role: 'admin',
     status: 'active',
     joinedAt: new Date().toISOString(),
-  },
-  {
-    _id: 'member_2',
-    teamId: 'team_1',
-    userId: 'user_2',
-    name: 'Rahul Sharma (Sales)',
-    email: 'rahul@simranmobile.com',
-    role: 'sales',
-    status: 'active',
-    joinedAt: new Date().toISOString(),
   }
 ];
 
 let demoCategories: string[] = ['mobile phone', 'accessories', 'smartwatch', 'tablets', 'audio'];
 let demoBrands: string[] = ['vivo', 'samsung', 'apple', 'oneplus', 'generic', 'boat'];
 
-let isDbSeeded = false;
-async function checkAndSeedMongo() {
-  if (isDbSeeded) return;
+async function initMongoSeed() {
   try {
     const conn = await connectDB();
     if (!conn) return;
 
-    const count = await Team.countDocuments();
-    if (count === 0) {
-      // Seed initial team
-      const t = await Team.create({
+    const teamCount = await Team.countDocuments();
+    if (teamCount === 0) {
+      const newTeam = await Team.create({
         name: 'simran mobile shop',
         ownerId: '65f000000000000000000001',
         inviteCode: 'SIMRAN88',
@@ -180,15 +114,15 @@ async function checkAndSeedMongo() {
         lowStockThresholdDefault: 5,
       });
 
-      const loc = await Location.create({
-        teamId: t._id,
+      const newLoc = await Location.create({
+        teamId: newTeam._id,
         name: 'Default Location',
         isDefault: true,
         isArchived: false,
       });
 
-      await Item.create({
-        teamId: t._id,
+      const newItem = await Item.create({
+        teamId: newTeam._id,
         sku: 'MOB-VIVO-V29',
         name: 'vivo V29 5G (128GB, Velvet Red)',
         description: 'Smartphone with 50MP OIS camera',
@@ -199,13 +133,34 @@ async function checkAndSeedMongo() {
         sellingPrice: 1500,
         minStock: 5,
         barcodes: ['8901234567890'],
-        stockByLocation: [{ locationId: loc._id, locationName: loc.name, quantity: 15 }],
+        images: [],
+        stockByLocation: [{ locationId: newLoc._id, locationName: newLoc.name, quantity: 15 }],
         totalStock: 15,
+        isArchived: false,
+      });
+
+      await StockTransaction.create({
+        teamId: newTeam._id,
+        type: 'stock_in',
+        referenceNo: 'TXN-100001',
+        toLocationId: newLoc._id,
+        toLocationName: newLoc.name,
+        items: [{
+          itemId: newItem._id,
+          sku: newItem.sku,
+          name: newItem.name,
+          quantity: 15,
+          unitCost: 1000,
+          unitPrice: 1500,
+        }],
+        totalQuantity: 15,
+        reason: 'Initial Store Setup',
+        userId: '65f000000000000000000001',
+        userName: 'Admin User',
       });
     }
-    isDbSeeded = true;
   } catch (err) {
-    console.error('Mongo seed/connect notice:', err);
+    console.error('MongoDB init error:', err);
   }
 }
 
@@ -215,9 +170,9 @@ export class InventoryStore {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        await checkAndSeedMongo();
+        await initMongoSeed();
         const teams = await Team.find({}).lean();
-        if (teams.length > 0) return JSON.parse(JSON.stringify(teams));
+        if (teams && teams.length > 0) return JSON.parse(JSON.stringify(teams));
       } catch (e) {
         console.error('MongoDB listTeams error:', e);
       }
@@ -270,14 +225,6 @@ export class InventoryStore {
       createdAt: new Date().toISOString(),
     };
     demoTeams.push(newTeam);
-    demoLocations.push({
-      _id: 'loc_' + Math.random().toString(36).substr(2, 9),
-      teamId: newTeam._id,
-      name: 'Default Location',
-      isDefault: true,
-      isArchived: false,
-      createdAt: new Date().toISOString(),
-    });
     return newTeam;
   }
 
@@ -289,9 +236,7 @@ export class InventoryStore {
         if (team) return JSON.parse(JSON.stringify(team));
       } catch (e) {}
     }
-
-    const team = demoTeams.find(t => t.inviteCode.toUpperCase() === inviteCode.trim().toUpperCase());
-    return team || null;
+    return demoTeams.find(t => t.inviteCode.toUpperCase() === inviteCode.trim().toUpperCase()) || null;
   }
 
   // Locations
@@ -300,7 +245,7 @@ export class InventoryStore {
       try {
         await connectDB();
         const locs = await Location.find({ teamId, isArchived: false }).lean();
-        if (locs.length > 0) return JSON.parse(JSON.stringify(locs));
+        if (locs && locs.length > 0) return JSON.parse(JSON.stringify(locs));
       } catch (e) {}
     }
     return demoLocations.filter(l => l.teamId === teamId && !l.isArchived);
@@ -342,13 +287,15 @@ export class InventoryStore {
         }
         if (query?.category && query.category !== 'all') filter.category = query.category;
         if (query?.brand && query.brand !== 'all') filter.brand = query.brand;
-        
+
         const items = await Item.find(filter).sort({ createdAt: -1 }).lean();
-        let parsed = JSON.parse(JSON.stringify(items));
-        if (query?.lowStockOnly) {
-          parsed = parsed.filter((i: IItem) => i.totalStock <= i.minStock);
+        if (items) {
+          let parsed = JSON.parse(JSON.stringify(items));
+          if (query?.lowStockOnly) {
+            parsed = parsed.filter((i: IItem) => Number(i.totalStock || 0) <= Number(i.minStock || 5));
+          }
+          if (parsed.length > 0) return parsed;
         }
-        if (parsed.length > 0) return parsed;
       } catch (e) {
         console.error('MongoDB getItems error:', e);
       }
@@ -370,7 +317,7 @@ export class InventoryStore {
       items = items.filter(i => i.brand.toLowerCase() === query.brand?.toLowerCase());
     }
     if (query?.lowStockOnly) {
-      items = items.filter(i => i.totalStock <= i.minStock);
+      items = items.filter(i => Number(i.totalStock) <= Number(i.minStock));
     }
     return items;
   }
@@ -402,8 +349,8 @@ export class InventoryStore {
   }
 
   static async createItem(teamId: string, itemData: Partial<IItem>): Promise<IItem> {
+    const initialQty = Number(itemData.totalStock) || 0;
     const defaultLoc = demoLocations.find(l => l.teamId === teamId && l.isDefault) || demoLocations[0];
-    const initialQty = itemData.totalStock || 0;
     
     const stockByLocation = itemData.stockByLocation || [
       {
@@ -428,12 +375,13 @@ export class InventoryStore {
           sellingPrice: Number(itemData.sellingPrice) || 0,
           minStock: Number(itemData.minStock) || 5,
           barcodes: itemData.barcodes && itemData.barcodes.length > 0 ? itemData.barcodes : ['BC-' + Date.now()],
+          images: [],
           stockByLocation,
-          totalStock: stockByLocation.reduce((acc, curr) => acc + curr.quantity, 0),
+          totalStock: initialQty,
           isArchived: false,
         });
 
-        if (newItem.totalStock > 0) {
+        if (initialQty > 0) {
           await StockTransaction.create({
             teamId,
             type: 'stock_in',
@@ -444,11 +392,11 @@ export class InventoryStore {
               itemId: newItem._id,
               sku: newItem.sku,
               name: newItem.name,
-              quantity: newItem.totalStock,
-              unitCost: newItem.costPrice,
-              unitPrice: newItem.sellingPrice,
+              quantity: initialQty,
+              unitCost: Number(itemData.costPrice) || 0,
+              unitPrice: Number(itemData.sellingPrice) || 0,
             }],
-            totalQuantity: newItem.totalStock,
+            totalQuantity: initialQty,
             reason: 'Initial Item Creation',
             userId: '65f000000000000000000001',
             userName: 'Admin User',
@@ -476,7 +424,7 @@ export class InventoryStore {
       barcodes: itemData.barcodes && itemData.barcodes.length > 0 ? itemData.barcodes : ['BC-' + Date.now()],
       images: [],
       stockByLocation,
-      totalStock: stockByLocation.reduce((acc, curr) => acc + curr.quantity, 0),
+      totalStock: initialQty,
       isArchived: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -518,15 +466,17 @@ export class InventoryStore {
     return false;
   }
 
-  // Stock Operations & Transactions
+  // Transactions
   static async recordTransaction(data: Omit<IStockTransaction, '_id' | 'referenceNo' | 'createdAt'>): Promise<IStockTransaction> {
     const referenceNo = 'TXN-' + Math.floor(100000 + Math.random() * 900000);
+    const totalQty = Number(data.totalQuantity) || data.items.reduce((acc, it) => acc + Number(it.quantity || 0), 0);
 
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
         const txn = await StockTransaction.create({
           ...data,
+          totalQuantity: totalQty,
           referenceNo,
           userId: '65f000000000000000000001',
         });
@@ -534,26 +484,27 @@ export class InventoryStore {
         for (const line of data.items) {
           const item = await Item.findById(line.itemId);
           if (!item) continue;
+          const qty = Number(line.quantity) || 0;
 
           if (data.type === 'stock_in' || data.type === 'purchase') {
             const loc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.toLocationId?.toString());
-            if (loc) loc.quantity += line.quantity;
-            else item.stockByLocation.push({ locationId: data.toLocationId, locationName: data.toLocationName || 'Default Location', quantity: line.quantity });
+            if (loc) loc.quantity += qty;
+            else item.stockByLocation.push({ locationId: data.toLocationId, locationName: data.toLocationName || 'Default Location', quantity: qty });
           } else if (data.type === 'stock_out' || data.type === 'sale') {
             const loc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.fromLocationId?.toString());
-            if (loc) loc.quantity = Math.max(0, loc.quantity - line.quantity);
+            if (loc) loc.quantity = Math.max(0, loc.quantity - qty);
           } else if (data.type === 'move') {
             const fromLoc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.fromLocationId?.toString());
-            if (fromLoc) fromLoc.quantity = Math.max(0, fromLoc.quantity - line.quantity);
+            if (fromLoc) fromLoc.quantity = Math.max(0, fromLoc.quantity - qty);
             const toLoc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.toLocationId?.toString());
-            if (toLoc) toLoc.quantity += line.quantity;
-            else item.stockByLocation.push({ locationId: data.toLocationId, locationName: data.toLocationName || 'Default Location', quantity: line.quantity });
+            if (toLoc) toLoc.quantity += qty;
+            else item.stockByLocation.push({ locationId: data.toLocationId, locationName: data.toLocationName || 'Default Location', quantity: qty });
           } else if (data.type === 'adjust') {
             const loc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.toLocationId?.toString() || l.locationId.toString() === data.fromLocationId?.toString());
-            if (loc) loc.quantity = line.quantity;
+            if (loc) loc.quantity = qty;
           }
 
-          item.totalStock = item.stockByLocation.reduce((acc: number, curr: any) => acc + curr.quantity, 0);
+          item.totalStock = item.stockByLocation.reduce((acc: number, curr: any) => acc + Number(curr.quantity || 0), 0);
           await item.save();
         }
 
@@ -567,36 +518,38 @@ export class InventoryStore {
       _id: 'txn_' + Math.random().toString(36).substr(2, 9),
       referenceNo,
       ...data,
+      totalQuantity: totalQty,
       createdAt: new Date().toISOString()
     };
 
     for (const line of txn.items) {
       const item = demoItems.find(i => i.teamId === txn.teamId && i._id === line.itemId);
       if (!item) continue;
+      const qty = Number(line.quantity) || 0;
       if (txn.type === 'stock_in') {
         let loc = item.stockByLocation.find(l => l.locationId === txn.toLocationId);
         if (!loc) {
           loc = { locationId: txn.toLocationId || 'loc_1', locationName: txn.toLocationName || 'Default Location', quantity: 0 };
           item.stockByLocation.push(loc);
         }
-        loc.quantity += line.quantity;
+        loc.quantity += qty;
       } else if (txn.type === 'stock_out') {
         let loc = item.stockByLocation.find(l => l.locationId === txn.fromLocationId);
-        if (loc) loc.quantity = Math.max(0, loc.quantity - line.quantity);
+        if (loc) loc.quantity = Math.max(0, loc.quantity - qty);
       } else if (txn.type === 'move') {
         let fromLoc = item.stockByLocation.find(l => l.locationId === txn.fromLocationId);
-        if (fromLoc) fromLoc.quantity = Math.max(0, fromLoc.quantity - line.quantity);
+        if (fromLoc) fromLoc.quantity = Math.max(0, fromLoc.quantity - qty);
         let toLoc = item.stockByLocation.find(l => l.locationId === txn.toLocationId);
         if (!toLoc) {
           toLoc = { locationId: txn.toLocationId || 'loc_1', locationName: txn.toLocationName || 'Default Location', quantity: 0 };
           item.stockByLocation.push(toLoc);
         }
-        toLoc.quantity += line.quantity;
+        toLoc.quantity += qty;
       } else if (txn.type === 'adjust') {
         let loc = item.stockByLocation.find(l => l.locationId === txn.toLocationId || l.locationId === txn.fromLocationId);
-        if (loc) loc.quantity = line.quantity;
+        if (loc) loc.quantity = qty;
       }
-      item.totalStock = item.stockByLocation.reduce((acc, curr) => acc + curr.quantity, 0);
+      item.totalStock = item.stockByLocation.reduce((acc, curr) => acc + Number(curr.quantity || 0), 0);
     }
     demoTransactions.unshift(txn);
     return txn;
@@ -607,7 +560,7 @@ export class InventoryStore {
       try {
         await connectDB();
         const txns = await StockTransaction.find({ teamId }).sort({ createdAt: -1 }).limit(limit).lean();
-        if (txns.length > 0) return JSON.parse(JSON.stringify(txns));
+        if (txns && txns.length > 0) return JSON.parse(JSON.stringify(txns));
       } catch (e) {}
     }
     return demoTransactions.filter(t => t.teamId === teamId).slice(0, limit);
@@ -671,7 +624,7 @@ export class InventoryStore {
     const txns = await this.getTransactions(teamId);
     
     const today = new Date().toISOString().split('T')[0];
-    const todayTxns = txns.filter(t => t.createdAt.startsWith(today));
+    const todayTxns = txns.filter(t => t.createdAt && t.createdAt.startsWith(today));
     
     const stockInToday = todayTxns
       .filter(t => t.type === 'stock_in' || t.type === 'purchase')

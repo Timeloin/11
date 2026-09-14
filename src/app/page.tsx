@@ -58,30 +58,31 @@ export default function App() {
   // Fetch initial data
   const loadData = useCallback(async () => {
     try {
-      const [teamsRes, metricsRes] = await Promise.all([
-        fetch('/api/teams').then((r) => r.json()),
-        fetch('/api/metrics').then((r) => r.json()),
-      ]);
+      const teamsRes = await fetch('/api/teams').then((r) => r.json());
+      let activeTeam = currentTeam;
 
       if (teamsRes.success && teamsRes.teams?.length > 0) {
         setTeams(teamsRes.teams);
-        if (!currentTeam) setCurrentTeam(teamsRes.teams[0]);
+        if (!activeTeam) {
+          activeTeam = teamsRes.teams[0];
+          setCurrentTeam(teamsRes.teams[0]);
+        }
       }
 
-      if (metricsRes.success) {
-        setMetrics(metricsRes.metrics);
-        if (metricsRes.categories) setCategories(metricsRes.categories);
-        if (metricsRes.brands) setBrands(metricsRes.brands);
-      }
-
-      const activeTeamId = currentTeam?._id || 'team_1';
-      const [itemsRes, locsRes, txnsRes, memRes] = await Promise.all([
+      const activeTeamId = activeTeam?._id || 'team_1';
+      const [metricsRes, itemsRes, locsRes, txnsRes, memRes] = await Promise.all([
+        fetch('/api/metrics?teamId=' + activeTeamId).then((r) => r.json()),
         fetch('/api/items?teamId=' + activeTeamId).then((r) => r.json()),
         fetch('/api/locations?teamId=' + activeTeamId).then((r) => r.json()),
         fetch('/api/transactions?teamId=' + activeTeamId).then((r) => r.json()),
         fetch('/api/members?teamId=' + activeTeamId).then((r) => r.json()),
       ]);
 
+      if (metricsRes.success) {
+        setMetrics(metricsRes.metrics);
+        if (metricsRes.categories) setCategories(metricsRes.categories);
+        if (metricsRes.brands) setBrands(metricsRes.brands);
+      }
       if (itemsRes.success) setItems(itemsRes.items);
       if (locsRes.success) setLocations(locsRes.locations);
       if (txnsRes.success) setTransactions(txnsRes.transactions);
@@ -191,6 +192,16 @@ export default function App() {
     });
   };
 
+  // Reactive metric calculations
+  const todayStr = new Date().toISOString().split('T')[0];
+  const liveStockInToday = transactions
+    .filter((t) => (t.type === 'stock_in' || t.type === 'purchase') && t.createdAt && new Date(t.createdAt).toISOString().startsWith(todayStr))
+    .reduce((acc, t) => acc + (Number(t.totalQuantity) || 0), 0);
+
+  const liveStockOutToday = transactions
+    .filter((t) => (t.type === 'stock_out' || t.type === 'sale') && t.createdAt && new Date(t.createdAt).toISOString().startsWith(todayStr))
+    .reduce((acc, t) => acc + (Number(t.totalQuantity) || 0), 0);
+
   return (
     <div className="min-h-screen bg-[#f3f4f8] text-gray-900 font-sans antialiased selection:bg-blue-500 selection:text-white pb-10">
       {/* Mobile Frame Container */}
@@ -205,9 +216,9 @@ export default function App() {
         {activeTab === 'home' && (
           <MetricBanner
             dateStr={metrics.todayDateStr}
-            totalItems={metrics.totalItems}
-            stockInToday={metrics.stockInToday}
-            stockOutToday={metrics.stockOutToday}
+            totalItems={items.length}
+            stockInToday={liveStockInToday}
+            stockOutToday={liveStockOutToday}
             currency={currentTeam?.currency}
           />
         )}
