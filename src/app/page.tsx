@@ -337,8 +337,8 @@ export default function App() {
               onOpenInviteMembers={() => setIsInviteOpen(true)}
               onOpenPastQuantity={() => setActiveTab('transactions')}
               onOpenBarcodeLabels={() => alert('Barcode Label Generator: Ready for thermal printer export!')}
-              onOpenPurchases={() => openStockModal('stock_in')}
-              onOpenSales={() => openStockModal('stock_out')}
+              onOpenPurchases={() => openStockModal('purchase')}
+              onOpenSales={() => openStockModal('sale')}
             />
           )}
 
