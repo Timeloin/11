@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ChevronRight, HelpCircle, ShieldAlert } from 'lucide-react';
+import { X, ChevronRight, HelpCircle } from 'lucide-react';
 import { ILocation } from '@/types';
 
 interface NewItemModalProps {
@@ -212,9 +212,9 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             </div>
           </div>
 
-          {/* Section 3: Starting Quantity & Location */}
+          {/* Section 3: Starting Quantity & Location & Safety Stock */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
-            <h2 className="font-bold text-gray-900 text-base">Initial Stock Quantity</h2>
+            <h2 className="font-bold text-gray-900 text-base">Inventory & Stock</h2>
 
             {/* Location Selector */}
             <div className="flex items-center justify-between border-b border-gray-50 pb-2.5">
@@ -233,7 +233,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             </div>
 
             {/* Quantity Input */}
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between border-b border-gray-50 pb-2.5">
               <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Starting Stock</span>
               <div className="flex items-center space-x-1">
                 <input
@@ -242,35 +242,27 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   placeholder="0"
-                  className="text-right text-gray-900 font-black text-sm bg-transparent focus:outline-none w-28 placeholder-gray-400"
+                  className="text-right text-gray-900 font-semibold text-sm bg-transparent focus:outline-none w-28 placeholder-gray-400"
                 />
                 <span className="text-gray-500 text-xs">pcs</span>
               </div>
             </div>
-          </div>
 
-          {/* Section 4: Safety Stock / Shortage Threshold */}
-          <div className="bg-amber-50/60 rounded-2xl border border-amber-200/80 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <ShieldAlert className="w-5 h-5 text-amber-600" />
-                <h2 className="font-bold text-amber-900 text-sm">Safety Stock (Shortage Level)</h2>
-              </div>
+            {/* Safety Stock */}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Safety Stock</span>
               <div className="flex items-center space-x-1">
                 <input
                   type="number"
                   min="0"
                   value={minStock}
                   onChange={(e) => setMinStock(e.target.value)}
-                  placeholder="e.g. 5"
-                  className="text-right text-gray-900 font-black text-sm bg-white px-2 py-1 rounded-lg border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 w-20"
+                  placeholder="0"
+                  className="text-right text-gray-900 font-semibold text-sm bg-transparent focus:outline-none w-28 placeholder-gray-400"
                 />
-                <span className="text-amber-800 text-xs font-semibold">pcs</span>
+                <span className="text-gray-500 text-xs">pcs</span>
               </div>
             </div>
-            <p className="text-[11px] text-amber-800/90 leading-relaxed">
-              When total stock falls <strong>below or equal to</strong> this quantity, this item will automatically show in <strong>View Shortages</strong> and <strong>Shortages by Date</strong>.
-            </p>
           </div>
 
           {/* Bottom Save Button */}
