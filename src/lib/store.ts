@@ -979,7 +979,19 @@ export class InventoryStore {
         });
 
         for (const line of data.items) {
-          const item = await Item.findById(line.itemId);
+          let item: any = null;
+          try {
+            item = await Item.findById(line.itemId);
+          } catch (e) {}
+          if (!item) {
+            item = await Item.findOne({
+              $or: [
+                { _id: line.itemId },
+                { sku: line.sku },
+                { name: line.name }
+              ]
+            });
+          }
           if (!item) continue;
           const qty = Number(line.quantity) || 0;
 

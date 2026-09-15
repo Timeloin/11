@@ -1,8 +1,8 @@
 import mongoose, { Schema } from 'mongoose';
 
 const TeamMemberSchema = new Schema({
-  teamId: { type: Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
-  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  teamId: { type: Schema.Types.Mixed, required: true, index: true },
+  userId: { type: Schema.Types.Mixed, required: true, index: true },
   name: { type: String, required: true },
   email: { type: String, required: true },
   password: { type: String },

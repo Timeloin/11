@@ -1,13 +1,13 @@
 import mongoose, { Schema } from 'mongoose';
 
 const StockByLocationSchema = new Schema({
-  locationId: { type: Schema.Types.ObjectId, ref: 'Location', required: true },
+  locationId: { type: Schema.Types.Mixed, required: true },
   locationName: { type: String, required: true },
   quantity: { type: Number, default: 0 }
 }, { _id: false });
 
 const ItemSchema = new Schema({
-  teamId: { type: Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
+  teamId: { type: Schema.Types.Mixed, required: true, index: true },
   sku: { type: String, required: true, trim: true },
   name: { type: String, required: true, trim: true, index: 'text' },
   description: { type: String },

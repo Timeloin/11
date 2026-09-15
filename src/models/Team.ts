@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 
 const TeamSchema = new Schema({
   name: { type: String, required: true, trim: true },
-  ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  ownerId: { type: Schema.Types.Mixed, required: false },
   ownerEmail: { type: String },
   ownerName: { type: String },
   inviteCode: { type: String, required: true, unique: true },
