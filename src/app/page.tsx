@@ -261,6 +261,15 @@ export default function App() {
       const data = await res.json();
       if (data.success && data.transaction) {
         setTransactions((prev) => prev.map((t) => (t._id === tempTxnId ? data.transaction : t)));
+        fetch('/api/sync?teamId=' + activeTeamId)
+          .then((r) => r.json())
+          .then((sync) => {
+            if (sync.success) {
+              if (sync.items) setItems(sync.items);
+              if (sync.metrics) setMetrics(sync.metrics);
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
       console.error('Background transaction error:', err);

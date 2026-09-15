@@ -974,7 +974,8 @@ export class InventoryStore {
           ...data,
           totalQuantity: totalQty,
           referenceNo,
-          userId: '65f000000000000000000001',
+          userId: data.userId || '65f000000000000000000001',
+          userName: data.userName || 'Admin User',
         });
 
         for (const line of data.items) {
@@ -982,22 +983,52 @@ export class InventoryStore {
           if (!item) continue;
           const qty = Number(line.quantity) || 0;
 
+          if (!item.stockByLocation || item.stockByLocation.length === 0) {
+            item.stockByLocation = [
+              { 
+                locationId: data.toLocationId || data.fromLocationId || 'loc_1', 
+                locationName: data.toLocationName || data.fromLocationName || 'Default Location', 
+                quantity: Number(item.totalStock) || 0 
+              }
+            ];
+          }
+
           if (data.type === 'stock_in' || data.type === 'purchase') {
-            const loc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.toLocationId?.toString());
-            if (loc) loc.quantity += qty;
-            else item.stockByLocation.push({ locationId: data.toLocationId, locationName: data.toLocationName || 'Default Location', quantity: qty });
+            let loc = item.stockByLocation.find((l: any) => data.toLocationId && l.locationId?.toString() === data.toLocationId?.toString());
+            if (!loc && item.stockByLocation.length > 0) loc = item.stockByLocation[0];
+            if (loc) {
+              loc.quantity = (Number(loc.quantity) || 0) + qty;
+            } else {
+              item.stockByLocation.push({ locationId: data.toLocationId || 'loc_1', locationName: data.toLocationName || 'Default Location', quantity: qty });
+            }
           } else if (data.type === 'stock_out' || data.type === 'sale') {
-            const loc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.fromLocationId?.toString());
-            if (loc) loc.quantity = Math.max(0, loc.quantity - qty);
+            let loc = item.stockByLocation.find((l: any) => data.fromLocationId && l.locationId?.toString() === data.fromLocationId?.toString());
+            if (!loc && item.stockByLocation.length > 0) loc = item.stockByLocation[0];
+            if (loc) {
+              loc.quantity = Math.max(0, (Number(loc.quantity) || 0) - qty);
+            }
           } else if (data.type === 'move') {
-            const fromLoc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.fromLocationId?.toString());
-            if (fromLoc) fromLoc.quantity = Math.max(0, fromLoc.quantity - qty);
-            const toLoc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.toLocationId?.toString());
-            if (toLoc) toLoc.quantity += qty;
-            else item.stockByLocation.push({ locationId: data.toLocationId, locationName: data.toLocationName || 'Default Location', quantity: qty });
+            let fromLoc = item.stockByLocation.find((l: any) => data.fromLocationId && l.locationId?.toString() === data.fromLocationId?.toString());
+            if (!fromLoc && item.stockByLocation.length > 0) fromLoc = item.stockByLocation[0];
+            if (fromLoc) fromLoc.quantity = Math.max(0, (Number(fromLoc.quantity) || 0) - qty);
+
+            let toLoc = item.stockByLocation.find((l: any) => data.toLocationId && l.locationId?.toString() === data.toLocationId?.toString());
+            if (toLoc) {
+              toLoc.quantity = (Number(toLoc.quantity) || 0) + qty;
+            } else {
+              item.stockByLocation.push({ locationId: data.toLocationId || 'loc_1', locationName: data.toLocationName || 'Default Location', quantity: qty });
+            }
           } else if (data.type === 'adjust') {
-            const loc = item.stockByLocation.find((l: any) => l.locationId.toString() === data.toLocationId?.toString() || l.locationId.toString() === data.fromLocationId?.toString());
-            if (loc) loc.quantity = qty;
+            let loc = item.stockByLocation.find((l: any) => 
+              (data.toLocationId && l.locationId?.toString() === data.toLocationId?.toString()) || 
+              (data.fromLocationId && l.locationId?.toString() === data.fromLocationId?.toString())
+            );
+            if (!loc && item.stockByLocation.length > 0) loc = item.stockByLocation[0];
+            if (loc) {
+              loc.quantity = qty;
+            } else {
+              item.stockByLocation.push({ locationId: data.toLocationId || data.fromLocationId || 'loc_1', locationName: 'Default Location', quantity: qty });
+            }
           }
 
           item.totalStock = item.stockByLocation.reduce((acc: number, curr: any) => acc + Number(curr.quantity || 0), 0);
@@ -1007,6 +1038,26 @@ export class InventoryStore {
         return JSON.parse(JSON.stringify(txn));
       } catch (e) {
         console.error('MongoDB recordTransaction error:', e);
+      }
+    }
+
+    // In-memory fallback stock update
+    for (const line of data.items) {
+      const item = demoItems.find(i => i._id === line.itemId);
+      if (item) {
+        const qty = Number(line.quantity) || 0;
+        if (!item.stockByLocation || item.stockByLocation.length === 0) {
+          item.stockByLocation = [{ locationId: 'loc_1', locationName: 'Default Location', quantity: item.totalStock || 0 }];
+        }
+        if (data.type === 'stock_in' || data.type === 'purchase') {
+          item.stockByLocation[0].quantity += qty;
+        } else if (data.type === 'stock_out' || data.type === 'sale') {
+          item.stockByLocation[0].quantity = Math.max(0, item.stockByLocation[0].quantity - qty);
+        } else if (data.type === 'adjust') {
+          item.stockByLocation[0].quantity = qty;
+        }
+        item.totalStock = item.stockByLocation.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
+        item.updatedAt = new Date().toISOString();
       }
     }
 

@@ -41,6 +41,18 @@ export const StockActionModal: React.FC<StockActionModalProps> = ({
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Sync locations
+  useEffect(() => {
+    if (locations && locations.length > 0) {
+      if (!fromLocId || !locations.some((l) => l._id === fromLocId)) {
+        setFromLocId(locations[0]._id);
+      }
+      if (!toLocId || !locations.some((l) => l._id === toLocId)) {
+        setToLocId(locations[1]?._id || locations[0]._id);
+      }
+    }
+  }, [locations, fromLocId, toLocId, isOpen]);
+
   // Sync selected item when preselectedItem or items change
   useEffect(() => {
     if (preselectedItem) {
@@ -105,15 +117,15 @@ export const StockActionModal: React.FC<StockActionModalProps> = ({
     if (!selectedItem) return;
 
     const qtyNum = parseFloat(quantity) || 0;
-    const fromLoc = locations.find((l) => l._id === fromLocId);
-    const toLoc = locations.find((l) => l._id === toLocId);
+    const activeFromLoc = locations.find((l) => l._id === fromLocId) || locations[0];
+    const activeToLoc = locations.find((l) => l._id === toLocId) || locations[1] || locations[0];
 
     const payload = {
       type,
-      fromLocationId: (type === 'stock_in' || type === 'purchase') ? undefined : fromLocId,
-      fromLocationName: (type === 'stock_in' || type === 'purchase') ? undefined : fromLoc?.name,
-      toLocationId: (type === 'stock_out' || type === 'sale') ? undefined : toLocId,
-      toLocationName: (type === 'stock_out' || type === 'sale') ? undefined : toLoc?.name,
+      fromLocationId: (type === 'stock_in' || type === 'purchase') ? undefined : (activeFromLoc?._id || fromLocId || 'loc_1'),
+      fromLocationName: (type === 'stock_in' || type === 'purchase') ? undefined : (activeFromLoc?.name || 'Default Location'),
+      toLocationId: (type === 'stock_out' || type === 'sale') ? undefined : (activeToLoc?._id || toLocId || 'loc_1'),
+      toLocationName: (type === 'stock_out' || type === 'sale') ? undefined : (activeToLoc?.name || 'Default Location'),
       items: [
         {
           itemId: selectedItem._id,
