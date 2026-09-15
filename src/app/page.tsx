@@ -11,7 +11,6 @@ import { SettingsScreen } from '@/components/SettingsScreen';
 import { NewItemModal } from '@/components/modals/NewItemModal';
 import { BarcodeScannerModal } from '@/components/modals/BarcodeScannerModal';
 import { StockActionModal } from '@/components/modals/StockActionModal';
-import { NewTeamModal } from '@/components/modals/NewTeamModal';
 import { InviteMemberModal } from '@/components/modals/InviteMemberModal';
 import { ItemDetailModal } from '@/components/modals/ItemDetailModal';
 import { LoginScreen } from '@/components/LoginScreen';
@@ -52,7 +51,6 @@ export default function App() {
   // Modals state
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [stockModalConfig, setStockModalConfig] = useState<{
     isOpen: boolean;
@@ -303,37 +301,6 @@ export default function App() {
     }
   };
 
-  const handleCreateTeam = async (name: string) => {
-    try {
-      const res = await fetch('/api/teams', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCurrentTeam(data.team);
-        setTeams((prev) => [data.team, ...prev]);
-        showToast('⚡ Shop created!');
-      }
-    } catch (e) {}
-  };
-
-  const handleJoinTeam = async (inviteCode: string) => {
-    const res = await fetch('/api/teams/join', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inviteCode }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setCurrentTeam(data.team);
-      await loadData();
-      showToast('⚡ Joined shop successfully!');
-    } else {
-      throw new Error(data.error || 'Failed to join team');
-    }
-  };
 
   const handleAddMember = async (memberData: any) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
@@ -477,7 +444,6 @@ export default function App() {
         <Header
           currentTeam={currentTeam}
           session={session}
-          onOpenTeamModal={() => setIsTeamModalOpen(true)}
           onLogout={handleLogout}
           onBackToAdmin={session.isSuperAdmin ? () => setViewingShopTeamId(null) : undefined}
         />
@@ -611,16 +577,6 @@ export default function App() {
           locations={locations}
           preselectedItem={stockModalConfig.preselectedItem}
           onExecute={handleExecuteTransaction}
-        />
-
-        <NewTeamModal
-          isOpen={isTeamModalOpen}
-          onClose={() => setIsTeamModalOpen(false)}
-          teams={teams}
-          currentTeam={currentTeam}
-          onSelectTeam={(t) => setCurrentTeam(t)}
-          onCreateTeam={handleCreateTeam}
-          onJoinTeam={handleJoinTeam}
         />
 
         <InviteMemberModal

@@ -127,24 +127,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Shop Details</h2>
         <div className="text-lg font-bold text-gray-900">{team?.name || 'simran mobile shop'}</div>
         <div className="flex items-center justify-between pt-2 text-xs text-gray-600">
-          <span>Invite Code: <strong className="font-mono text-blue-600 font-bold">{team?.inviteCode}</strong></span>
+          <span>Store: <strong className="font-semibold text-gray-800">{team?.name || 'simran mobile shop'}</strong></span>
           <span>Currency: <strong className="font-bold">{team?.currency || '₹'}</strong></span>
         </div>
       </div>
 
-      {/* Team Members Section */}
+      {/* Staff & Members Section */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Users className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-gray-900 text-sm">Staff & Roles ({members.length}/20)</h3>
+            <h3 className="font-bold text-gray-900 text-sm">Staff & Members ({members.length})</h3>
           </div>
           <button
             onClick={onOpenInvite}
             className="text-xs font-bold text-blue-600 hover:underline flex items-center space-x-1"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Invite</span>
+            <span>Add Member</span>
           </button>
         </div>
 

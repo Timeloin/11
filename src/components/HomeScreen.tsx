@@ -188,9 +188,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </button>
       </div>
 
-      {/* Group: Team Members */}
+      {/* Group: Staff Members */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
-        <h2 className="text-base font-bold text-gray-900">Team Members</h2>
+        <h2 className="text-base font-bold text-gray-900">Staff Members</h2>
         <button
           onClick={onOpenInviteMembers}
           className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
@@ -199,7 +199,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
               <UserPlus className="w-4 h-4" />
             </div>
-            <span className="text-sm font-semibold text-gray-900">Invite Members</span>
+            <span className="text-sm font-semibold text-gray-900">Add Staff Member</span>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
         </button>

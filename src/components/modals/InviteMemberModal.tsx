@@ -163,7 +163,7 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
               disabled={loading}
               className="w-full py-3.5 bg-[#4965fa] hover:bg-blue-600 text-white font-bold text-sm rounded-2xl shadow-md transition-colors"
             >
-              {loading ? 'Sending Invite...' : 'Send Invitation'}
+              {loading ? 'Adding Member...' : 'Save Staff Member'}
             </button>
           </div>
         </form>

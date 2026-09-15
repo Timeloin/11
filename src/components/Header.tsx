@@ -1,11 +1,10 @@
 import React from 'react';
-import { ChevronDown, Zap, Bell, X } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import { ITeam, UserSession } from '@/types';
 
 interface HeaderProps {
   currentTeam: ITeam | null;
   session?: UserSession | null;
-  onOpenTeamModal: () => void;
   onLogout?: () => void;
   onBackToAdmin?: () => void;
 }
@@ -13,7 +12,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentTeam,
   session,
-  onOpenTeamModal,
   onLogout,
   onBackToAdmin,
 }) => {
@@ -32,29 +30,24 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      {/* Team Bar */}
+      {/* Brand Header */}
       <div className="flex items-center justify-between px-4 py-3">
-        <button
-          onClick={onOpenTeamModal}
-          className="flex items-center space-x-2.5 group active:scale-98 transition-transform text-left"
-        >
+        <div className="flex items-center space-x-2.5">
           <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shadow-xs">
             <Zap className="w-4 h-4 fill-blue-500" />
           </div>
-          <div className="flex items-center space-x-1.5">
-            <span className="font-bold text-gray-900 text-lg tracking-tight">
-              {currentTeam?.name || 'simran mobile shop'}
-            </span>
-            <ChevronDown className="w-4 h-4 text-gray-500 group-hover:text-gray-700 transition-colors" />
-          </div>
-        </button>
+          <span className="font-bold text-gray-900 text-lg tracking-tight">
+            {currentTeam?.name || 'simran mobile shop'}
+          </span>
+        </div>
 
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 text-xs font-bold shadow-2xs">
-            {session?.name ? session.name.slice(0, 2).toUpperCase() : currentTeam?.inviteCode?.slice(0, 2) || 'SM'}
+            {session?.name ? session.name.slice(0, 2).toUpperCase() : 'SM'}
           </div>
         </div>
       </div>
     </header>
   );
 };
+
