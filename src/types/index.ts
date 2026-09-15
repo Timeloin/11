@@ -23,6 +23,7 @@ export interface CustomPermissions {
 export interface UserSession {
   userId: string;
   name: string;
+  userName?: string;
   email: string;
   activeTeamId?: string;
   role?: Role;

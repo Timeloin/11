@@ -50,15 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <div className="flex items-center space-x-2">
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="px-2.5 py-1 text-xs font-bold text-gray-500 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg border border-gray-200 transition-colors"
-            >
-              Logout
-            </button>
-          )}
-          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 text-xs font-semibold">
+          <div className="w-8 h-8 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 text-xs font-bold shadow-2xs">
             {session?.name ? session.name.slice(0, 2).toUpperCase() : currentTeam?.inviteCode?.slice(0, 2) || 'SM'}
           </div>
         </div>

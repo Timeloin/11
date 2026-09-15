@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowRightLeft, Sliders, ShoppingBag, Receipt, Calendar, User, Download } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowRightLeft, Sliders, ShoppingBag, Receipt, Calendar, User, Download, ChevronRight, Info } from 'lucide-react';
 import { IStockTransaction, TransactionType } from '@/types';
+import { TransactionDetailModal } from '@/components/modals/TransactionDetailModal';
 
 interface TransactionsScreenProps {
   transactions: IStockTransaction[];
@@ -9,6 +10,7 @@ interface TransactionsScreenProps {
 
 export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transactions, onExport }) => {
   const [filterType, setFilterType] = useState<string>('all');
+  const [selectedTxnForDetail, setSelectedTxnForDetail] = useState<IStockTransaction | null>(null);
 
   const filtered = transactions.filter((t) => {
     if (filterType === 'all') return true;
@@ -54,7 +56,7 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Activity & Audit</h1>
-          <p className="text-xs text-gray-500">Every stock update is immutably logged</p>
+          <p className="text-xs text-gray-500">Tap any record to inspect full details</p>
         </div>
         <button
           onClick={onExport}
@@ -67,13 +69,13 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
 
       {/* Filter Tabs */}
       <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
-        {['all', 'stock_in', 'stock_out', 'move', 'adjust'].map((tab) => (
+        {['all', 'stock_in', 'stock_out', 'move', 'adjust', 'sale', 'purchase'].map((tab) => (
           <button
             key={tab}
             onClick={() => setFilterType(tab)}
             className={`px-3 py-1 rounded-xl text-xs font-semibold capitalize whitespace-nowrap transition-colors ${
               filterType === tab
-                ? 'bg-gray-900 text-white'
+                ? 'bg-gray-900 text-white shadow-xs'
                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
             }`}
           >
@@ -102,7 +104,8 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
             return (
               <div
                 key={txn._id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-xs p-3.5 space-y-2.5"
+                onClick={() => setSelectedTxnForDetail(txn)}
+                className="bg-white rounded-2xl border border-gray-100 shadow-xs p-3.5 space-y-2.5 cursor-pointer hover:border-blue-300 hover:shadow-md active:scale-98 transition-all group"
               >
                 <div className="flex items-center justify-between">
                   <span
@@ -111,36 +114,48 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
                     <Icon className="w-3 h-3 stroke-[2.5]" />
                     <span>{badge.label}</span>
                   </span>
-                  <span className="text-[11px] text-gray-400 font-medium">{dateFormatted}</span>
+                  <div className="flex items-center space-x-1 text-[11px] text-gray-400 font-medium group-hover:text-blue-600 transition-colors">
+                    <span>{dateFormatted}</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </div>
                 </div>
 
                 <div>
-                  {txn.items.map((line, idx) => (
+                  {txn.items && txn.items.map((line, idx) => (
                     <div key={idx} className="flex justify-between items-center text-sm">
-                      <span className="font-bold text-gray-900">{line.name}</span>
+                      <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{line.name}</span>
                       <span className="font-black text-gray-900">
-                        {txn.type === 'stock_in' ? '+' : txn.type === 'stock_out' ? '-' : ''}
+                        {(txn.type === 'stock_in' || txn.type === 'purchase') ? '+' : (txn.type === 'stock_out' || txn.type === 'sale') ? '-' : ''}
                         {line.quantity} pcs
                       </span>
                     </div>
                   ))}
                   {txn.reason && (
-                    <p className="text-xs text-gray-500 mt-1 italic font-serif">"{txn.reason}"</p>
+                    <p className="text-xs text-gray-500 mt-1 italic font-serif truncate">"{txn.reason}"</p>
                   )}
                 </div>
 
                 <div className="pt-2 border-t border-gray-50 flex items-center justify-between text-[11px] text-gray-400">
-                  <div className="flex items-center space-x-1">
-                    <User className="w-3 h-3" />
-                    <span>{txn.userName}</span>
+                  <div className="flex items-center space-x-1.5 font-medium text-gray-600">
+                    <div className="w-4 h-4 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-[9px] font-bold">
+                      {txn.userName ? txn.userName.slice(0, 1).toUpperCase() : 'U'}
+                    </div>
+                    <span>{txn.userName || 'Admin'}</span>
                   </div>
-                  <span className="font-mono">{txn.referenceNo}</span>
+                  <span className="font-mono text-gray-400">{txn.referenceNo}</span>
                 </div>
               </div>
             );
           })
         )}
       </div>
+
+      {/* Transaction Detail Modal */}
+      <TransactionDetailModal
+        isOpen={!!selectedTxnForDetail}
+        transaction={selectedTxnForDetail}
+        onClose={() => setSelectedTxnForDetail(null)}
+      />
     </div>
   );
 };

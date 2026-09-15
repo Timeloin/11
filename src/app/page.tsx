@@ -199,10 +199,32 @@ export default function App() {
     }
   };
 
+  const handleUpdateProfileName = async (newName: string) => {
+    if (!session) return;
+    const updatedSession = { ...session, userName: newName, name: newName };
+    setSession(updatedSession);
+    try {
+      localStorage.setItem('inventory_session', JSON.stringify(updatedSession));
+    } catch (e) {}
+
+    showToast('Name updated successfully!');
+
+    try {
+      await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: session.email, userName: newName }),
+      });
+    } catch (e) {
+      console.error('Profile update error:', e);
+    }
+  };
+
   const handleExecuteTransaction = async (txnData: any) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
     const tempTxnId = 'txn_temp_' + Date.now();
     const qty = Number(txnData.totalQuantity) || 0;
+    const currentOperator = session?.userName || session?.name || 'Admin';
 
     // 1. Instant local state update (0ms lag!)
     const optimisticTxn: IStockTransaction = {
@@ -218,7 +240,7 @@ export default function App() {
       totalQuantity: qty,
       reason: txnData.reason || '',
       userId: session?.userId || 'user_1',
-      userName: session?.name || 'Admin',
+      userName: currentOperator,
       createdAt: new Date().toISOString(),
     };
 
@@ -256,7 +278,12 @@ export default function App() {
       const res = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...txnData, teamId: activeTeamId }),
+        body: JSON.stringify({
+          ...txnData,
+          teamId: activeTeamId,
+          userId: session?.userId || 'user_1',
+          userName: currentOperator,
+        }),
       });
       const data = await res.json();
       if (data.success && data.transaction) {
@@ -523,6 +550,9 @@ export default function App() {
               team={currentTeam}
               members={members}
               locations={locations}
+              session={session}
+              onUpdateProfileName={handleUpdateProfileName}
+              onLogout={handleLogout}
               onOpenInvite={() => setIsInviteOpen(true)}
               onAddLocation={handleAddLocation}
               onExportData={handleExportCSV}
