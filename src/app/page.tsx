@@ -97,45 +97,38 @@ export default function App() {
     } catch (e) {}
   };
 
-  // Fetch shop inventory data
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => {
+      setToast((curr) => (curr === msg ? null : curr));
+    }, 2500);
+  };
+
+  // Fetch shop inventory data (using single fast /api/sync)
   const loadData = useCallback(async () => {
     if (!session) return;
     try {
-      const teamsRes = await fetch('/api/teams').then((r) => r.json());
-      let targetTeam = currentTeam;
+      const targetTeamId = viewingShopTeamId || currentTeam?._id || session.activeTeamId || 'team_1';
+      const syncRes = await fetch('/api/sync?teamId=' + targetTeamId).then((r) => r.json());
 
-      if (teamsRes.success && teamsRes.teams?.length > 0) {
-        setTeams(teamsRes.teams);
-        if (viewingShopTeamId) {
-          targetTeam = teamsRes.teams.find((t: ITeam) => t._id === viewingShopTeamId) || teamsRes.teams[0];
-        } else if (session.activeTeamId) {
-          targetTeam = teamsRes.teams.find((t: ITeam) => t._id === session.activeTeamId) || teamsRes.teams[0];
-        } else if (!targetTeam) {
-          targetTeam = teamsRes.teams[0];
+      if (syncRes.success) {
+        if (syncRes.teams?.length > 0) {
+          setTeams(syncRes.teams);
+          const matched = syncRes.teams.find((t: ITeam) => t._id === targetTeamId) || syncRes.teams[0];
+          setCurrentTeam(matched);
         }
-        setCurrentTeam(targetTeam);
+        if (syncRes.metrics) setMetrics(syncRes.metrics);
+        if (syncRes.categories) setCategories(syncRes.categories);
+        if (syncRes.brands) setBrands(syncRes.brands);
+        if (syncRes.items) setItems(syncRes.items);
+        if (syncRes.locations) setLocations(syncRes.locations);
+        if (syncRes.transactions) setTransactions(syncRes.transactions);
+        if (syncRes.members) setMembers(syncRes.members);
       }
-
-      const activeTeamId = targetTeam?._id || session.activeTeamId || 'team_1';
-      const [metricsRes, itemsRes, locsRes, txnsRes, memRes] = await Promise.all([
-        fetch('/api/metrics?teamId=' + activeTeamId).then((r) => r.json()),
-        fetch('/api/items?teamId=' + activeTeamId).then((r) => r.json()),
-        fetch('/api/locations?teamId=' + activeTeamId).then((r) => r.json()),
-        fetch('/api/transactions?teamId=' + activeTeamId).then((r) => r.json()),
-        fetch('/api/members?teamId=' + activeTeamId).then((r) => r.json()),
-      ]);
-
-      if (metricsRes.success) {
-        setMetrics(metricsRes.metrics);
-        if (metricsRes.categories) setCategories(metricsRes.categories);
-        if (metricsRes.brands) setBrands(metricsRes.brands);
-      }
-      if (itemsRes.success) setItems(itemsRes.items);
-      if (locsRes.success) setLocations(locsRes.locations);
-      if (txnsRes.success) setTransactions(txnsRes.transactions);
-      if (memRes.success) setMembers(memRes.members);
     } catch (e) {
-      console.error('Error loading data:', e);
+      console.error('Error syncing shop data:', e);
     }
   }, [session, currentTeam, viewingShopTeamId]);
 
@@ -145,38 +138,149 @@ export default function App() {
     }
   }, [session, viewingShopTeamId, loadData]);
 
-  // Handlers
+  // Handlers with INSTANT Optimistic State Updates (0ms delay!)
   const handleSaveItem = async (itemData: any) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
-    await fetch('/api/items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...itemData, teamId: activeTeamId }),
-    });
-    await loadData();
+    const tempId = 'temp_' + Date.now();
+    const parsedStock = Number(itemData.totalStock) || 0;
+    const parsedCost = Number(itemData.costPrice) || 0;
+
+    const optimisticItem: IItem = {
+      _id: tempId,
+      teamId: activeTeamId,
+      sku: itemData.sku || 'SKU-' + Date.now().toString().slice(-6),
+      name: itemData.name || 'New Item',
+      description: itemData.description || '',
+      category: itemData.category || 'General',
+      brand: itemData.brand || 'Generic',
+      unit: itemData.unit || 'pcs',
+      costPrice: parsedCost,
+      sellingPrice: Number(itemData.sellingPrice) || 0,
+      minStock: Number(itemData.minStock) || 5,
+      barcodes: itemData.barcodes || [],
+      images: [],
+      stockByLocation: itemData.stockByLocation || [],
+      totalStock: parsedStock,
+      isArchived: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 1. Instant local state update (0ms lag!)
+    setItems((prev) => [optimisticItem, ...prev]);
+    setMetrics((prev) => ({
+      ...prev,
+      totalItems: prev.totalItems + 1,
+      stockInToday: prev.stockInToday + parsedStock,
+      totalInventoryValue: prev.totalInventoryValue + (parsedStock * parsedCost),
+    }));
+    if (itemData.category && !categories.includes(itemData.category.toLowerCase())) {
+      setCategories((prev) => [...prev, itemData.category.toLowerCase()]);
+    }
+    if (itemData.brand && !brands.includes(itemData.brand.toLowerCase())) {
+      setBrands((prev) => [...prev, itemData.brand.toLowerCase()]);
+    }
+
+    showToast('⚡ Item created instantly!');
+
+    // 2. Background database persistence
+    try {
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...itemData, teamId: activeTeamId }),
+      });
+      const data = await res.json();
+      if (data.success && data.item) {
+        setItems((prev) => prev.map((i) => (i._id === tempId ? data.item : i)));
+      }
+    } catch (err) {
+      console.error('Background save error:', err);
+    }
   };
 
   const handleExecuteTransaction = async (txnData: any) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
-    await fetch('/api/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...txnData, teamId: activeTeamId }),
-    });
-    await loadData();
+    const tempTxnId = 'txn_temp_' + Date.now();
+    const qty = Number(txnData.totalQuantity) || 0;
+
+    // 1. Instant local state update (0ms lag!)
+    const optimisticTxn: IStockTransaction = {
+      _id: tempTxnId,
+      teamId: activeTeamId,
+      type: txnData.type,
+      referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
+      fromLocationId: txnData.fromLocationId,
+      fromLocationName: txnData.fromLocationName,
+      toLocationId: txnData.toLocationId,
+      toLocationName: txnData.toLocationName,
+      items: txnData.items || [],
+      totalQuantity: qty,
+      reason: txnData.reason || '',
+      userId: session?.userId || 'user_1',
+      userName: session?.name || 'Admin',
+      createdAt: new Date().toISOString(),
+    };
+
+    setTransactions((prev) => [optimisticTxn, ...prev]);
+
+    if (txnData.items && txnData.items.length > 0) {
+      const targetItemId = txnData.items[0].itemId;
+      setItems((prev) =>
+        prev.map((it) => {
+          if (it._id !== targetItemId) return it;
+          let newTotal = Number(it.totalStock) || 0;
+          if (txnData.type === 'stock_in' || txnData.type === 'purchase') {
+            newTotal += qty;
+          } else if (txnData.type === 'stock_out' || txnData.type === 'sale') {
+            newTotal = Math.max(0, newTotal - qty);
+          } else if (txnData.type === 'adjust') {
+            newTotal = qty;
+          }
+          return { ...it, totalStock: newTotal };
+        })
+      );
+    }
+
+    setMetrics((prev) => ({
+      ...prev,
+      stockInToday: (txnData.type === 'stock_in' || txnData.type === 'purchase') ? prev.stockInToday + qty : prev.stockInToday,
+      stockOutToday: (txnData.type === 'stock_out' || txnData.type === 'sale') ? prev.stockOutToday + qty : prev.stockOutToday,
+    }));
+
+    const typeTitle = txnData.type.replace('_', ' ').toUpperCase();
+    showToast(`⚡ ${typeTitle} recorded instantly!`);
+
+    // 2. Background database persistence
+    try {
+      const res = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...txnData, teamId: activeTeamId }),
+      });
+      const data = await res.json();
+      if (data.success && data.transaction) {
+        setTransactions((prev) => prev.map((t) => (t._id === tempTxnId ? data.transaction : t)));
+      }
+    } catch (err) {
+      console.error('Background transaction error:', err);
+    }
   };
 
   const handleCreateTeam = async (name: string) => {
-    const res = await fetch('/api/teams', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setCurrentTeam(data.team);
-      await loadData();
-    }
+    try {
+      const res = await fetch('/api/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentTeam(data.team);
+        setTeams((prev) => [data.team, ...prev]);
+        showToast('⚡ Shop created!');
+      }
+    } catch (e) {}
   };
 
   const handleJoinTeam = async (inviteCode: string) => {
@@ -189,6 +293,7 @@ export default function App() {
     if (data.success) {
       setCurrentTeam(data.team);
       await loadData();
+      showToast('⚡ Joined shop successfully!');
     } else {
       throw new Error(data.error || 'Failed to join team');
     }
@@ -196,22 +301,56 @@ export default function App() {
 
   const handleAddMember = async (memberData: any) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
-    await fetch('/api/members', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...memberData, teamId: activeTeamId }),
-    });
-    await loadData();
+    const tempMember: ITeamMember = {
+      _id: 'member_temp_' + Date.now(),
+      teamId: activeTeamId,
+      userId: 'user_temp_' + Date.now(),
+      name: memberData.name,
+      email: memberData.email,
+      role: memberData.role,
+      status: 'active',
+      joinedAt: new Date().toISOString(),
+    };
+    setMembers((prev) => [tempMember, ...prev]);
+    showToast('⚡ Staff member added!');
+
+    try {
+      const res = await fetch('/api/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...memberData, teamId: activeTeamId }),
+      });
+      const data = await res.json();
+      if (data.success && data.member) {
+        setMembers((prev) => prev.map((m) => (m._id === tempMember._id ? data.member : m)));
+      }
+    } catch (e) {}
   };
 
   const handleAddLocation = async (name: string) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
-    await fetch('/api/locations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, teamId: activeTeamId }),
-    });
-    await loadData();
+    const tempLoc: ILocation = {
+      _id: 'loc_temp_' + Date.now(),
+      teamId: activeTeamId,
+      name,
+      isDefault: false,
+      isArchived: false,
+      createdAt: new Date().toISOString(),
+    };
+    setLocations((prev) => [...prev, tempLoc]);
+    showToast('⚡ Location added!');
+
+    try {
+      const res = await fetch('/api/locations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, teamId: activeTeamId }),
+      });
+      const data = await res.json();
+      if (data.success && data.location) {
+        setLocations((prev) => prev.map((l) => (l._id === tempLoc._id ? data.location : l)));
+      }
+    } catch (e) {}
   };
 
   const handleExportCSV = () => {
@@ -291,6 +430,13 @@ export default function App() {
     <div className="min-h-screen bg-[#f3f4f8] text-gray-900 font-sans antialiased selection:bg-blue-500 selection:text-white pb-10">
       {/* Mobile Frame Container */}
       <div className="max-w-md mx-auto bg-white min-h-screen shadow-2xl relative flex flex-col">
+        {/* Floating Toast Notification */}
+        {toast && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900/95 backdrop-blur-md text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl flex items-center space-x-2 border border-gray-700 animate-in fade-in slide-in-from-top-3 duration-150">
+            <span>{toast}</span>
+          </div>
+        )}
+
         {/* Header */}
         <Header
           currentTeam={currentTeam}

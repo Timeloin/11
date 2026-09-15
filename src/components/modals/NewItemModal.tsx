@@ -36,38 +36,33 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      const selectedLoc = locations.find((l) => l._id === selectedLocationId) || locations[0];
-      const parsedQty = parseInt(quantity.replace(/,/g, ''), 10) || 0;
+    const selectedLoc = locations.find((l) => l._id === selectedLocationId) || locations[0];
+    const parsedQty = parseInt(quantity.replace(/,/g, ''), 10) || 0;
 
-      await onSave({
-        name: name.trim() || (brand.toUpperCase() + ' ' + (category || 'Item')),
-        description: description.trim(),
-        sku: sku.trim() || 'SKU-' + Date.now().toString().slice(-6),
-        category: category.trim(),
-        brand: brand.trim(),
-        costPrice: parseFloat(costPrice) || 0,
-        sellingPrice: parseFloat(sellingPrice) || 0,
-        minStock: parseInt(minStock, 10) || 5,
-        barcodes: barcode.trim() ? [barcode.trim()] : [],
-        stockByLocation: [
-          {
-            locationId: selectedLoc?._id || 'loc_1',
-            locationName: selectedLoc?.name || 'Default Location',
-            quantity: parsedQty,
-          },
-        ],
-        totalStock: parsedQty,
-      });
-      onClose();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    const payload = {
+      name: name.trim() || (brand.toUpperCase() + ' ' + (category || 'Item')),
+      description: description.trim(),
+      sku: sku.trim() || 'SKU-' + Date.now().toString().slice(-6),
+      category: category.trim(),
+      brand: brand.trim(),
+      costPrice: parseFloat(costPrice) || 0,
+      sellingPrice: parseFloat(sellingPrice) || 0,
+      minStock: parseInt(minStock, 10) || 5,
+      barcodes: barcode.trim() ? [barcode.trim()] : [],
+      stockByLocation: [
+        {
+          locationId: selectedLoc?._id || 'loc_1',
+          locationName: selectedLoc?.name || 'Default Location',
+          quantity: parsedQty,
+        },
+      ],
+      totalStock: parsedQty,
+    };
+
+    onClose();
+    onSave(payload);
   };
 
   const selectedLocName =

@@ -100,40 +100,36 @@ export const StockActionModal: React.FC<StockActionModalProps> = ({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
-    setLoading(true);
-    try {
-      const qtyNum = parseFloat(quantity) || 0;
-      const fromLoc = locations.find((l) => l._id === fromLocId);
-      const toLoc = locations.find((l) => l._id === toLocId);
 
-      await onExecute({
-        type,
-        fromLocationId: (type === 'stock_in' || type === 'purchase') ? undefined : fromLocId,
-        fromLocationName: (type === 'stock_in' || type === 'purchase') ? undefined : fromLoc?.name,
-        toLocationId: (type === 'stock_out' || type === 'sale') ? undefined : toLocId,
-        toLocationName: (type === 'stock_out' || type === 'sale') ? undefined : toLoc?.name,
-        items: [
-          {
-            itemId: selectedItem._id,
-            sku: selectedItem.sku,
-            name: selectedItem.name,
-            quantity: qtyNum,
-            unitCost: selectedItem.costPrice,
-            unitPrice: selectedItem.sellingPrice,
-          },
-        ],
-        totalQuantity: qtyNum,
-        reason: reason || (type === 'adjust' ? 'Physical count correction' : (type === 'purchase' ? 'Purchased stock' : (type === 'sale' ? 'Customer sale' : 'Regular operation'))),
-      });
-      onClose();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    const qtyNum = parseFloat(quantity) || 0;
+    const fromLoc = locations.find((l) => l._id === fromLocId);
+    const toLoc = locations.find((l) => l._id === toLocId);
+
+    const payload = {
+      type,
+      fromLocationId: (type === 'stock_in' || type === 'purchase') ? undefined : fromLocId,
+      fromLocationName: (type === 'stock_in' || type === 'purchase') ? undefined : fromLoc?.name,
+      toLocationId: (type === 'stock_out' || type === 'sale') ? undefined : toLocId,
+      toLocationName: (type === 'stock_out' || type === 'sale') ? undefined : toLoc?.name,
+      items: [
+        {
+          itemId: selectedItem._id,
+          sku: selectedItem.sku,
+          name: selectedItem.name,
+          quantity: qtyNum,
+          unitCost: selectedItem.costPrice,
+          unitPrice: selectedItem.sellingPrice,
+        },
+      ],
+      totalQuantity: qtyNum,
+      reason: reason || (type === 'adjust' ? 'Physical count correction' : (type === 'purchase' ? 'Purchased stock' : (type === 'sale' ? 'Customer sale' : 'Regular operation'))),
+    };
+
+    onClose();
+    onExecute(payload);
   };
 
   return (
