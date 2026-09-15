@@ -250,7 +250,10 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
 
-    setTransactions((prev) => [optimisticTxn, ...prev]);
+    setTransactions((prev) => {
+      const updated = [optimisticTxn, ...prev];
+      return updated.length >= 400 ? updated.slice(0, 300) : updated;
+    });
 
     if (txnData.items && txnData.items.length > 0) {
       const targetItemId = txnData.items[0].itemId;

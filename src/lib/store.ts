@@ -1047,6 +1047,26 @@ export class InventoryStore {
           await item.save();
         }
 
+        // Silent Background Auto-Rotation:
+        // When transaction count reaches 400, automatically delete the oldest 100 transactions
+        try {
+          const totalTxnCount = await StockTransaction.countDocuments({ teamId: data.teamId });
+          if (totalTxnCount >= 400) {
+            const oldest100 = await StockTransaction.find({ teamId: data.teamId })
+              .sort({ createdAt: 1 })
+              .limit(100)
+              .select('_id')
+              .lean();
+
+            if (oldest100 && oldest100.length > 0) {
+              const idsToDelete = oldest100.map((doc: any) => doc._id);
+              await StockTransaction.deleteMany({ _id: { $in: idsToDelete } });
+            }
+          }
+        } catch (cleanupErr) {
+          console.error('Silent auto transaction cleanup error:', cleanupErr);
+        }
+
         return JSON.parse(JSON.stringify(txn));
       } catch (e) {
         console.error('MongoDB recordTransaction error:', e);
@@ -1081,6 +1101,20 @@ export class InventoryStore {
       createdAt: new Date().toISOString()
     };
     demoTransactions.unshift(txn);
+
+    // In-memory fallback auto-cleanup: keep newest 300 if >= 400
+    const teamTxns = demoTransactions.filter(t => t.teamId === data.teamId);
+    if (teamTxns.length >= 400) {
+      let count = 0;
+      demoTransactions = demoTransactions.filter(t => {
+        if (t.teamId === data.teamId) {
+          count++;
+          return count <= 300;
+        }
+        return true;
+      });
+    }
+
     return txn;
   }
 
