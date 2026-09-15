@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ChevronRight, HelpCircle, Camera } from 'lucide-react';
+import { X, ChevronRight, HelpCircle, ShieldAlert } from 'lucide-react';
 import { ILocation } from '@/types';
 
 interface NewItemModalProps {
@@ -21,16 +21,17 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
   initialBarcode,
   onSave,
 }) => {
+  // All initial states are clean and EMPTY (no default pre-filled dummy values!)
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [sku, setSku] = useState('');
-  const [category, setCategory] = useState('mobile phone');
-  const [brand, setBrand] = useState('vivo');
-  const [costPrice, setCostPrice] = useState('1000');
-  const [sellingPrice, setSellingPrice] = useState('1500');
+  const [category, setCategory] = useState('');
+  const [brand, setBrand] = useState('');
+  const [costPrice, setCostPrice] = useState('');
+  const [sellingPrice, setSellingPrice] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState(locations[0]?._id || '');
-  const [quantity, setQuantity] = useState('10');
-  const [minStock, setMinStock] = useState('5');
+  const [quantity, setQuantity] = useState('');
+  const [minStock, setMinStock] = useState(''); // Safety stock
   const [barcode, setBarcode] = useState(initialBarcode || '');
   const [loading, setLoading] = useState(false);
 
@@ -40,16 +41,21 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
     e.preventDefault();
     const selectedLoc = locations.find((l) => l._id === selectedLocationId) || locations[0];
     const parsedQty = parseInt(quantity.replace(/,/g, ''), 10) || 0;
+    const parsedSafetyStock = parseInt(minStock.replace(/,/g, ''), 10) || 0;
+
+    const finalBrand = brand.trim() || 'Generic';
+    const finalCategory = category.trim() || 'General';
+    const finalName = name.trim() || `${finalBrand} ${finalCategory} Item`;
 
     const payload = {
-      name: name.trim() || (brand.toUpperCase() + ' ' + (category || 'Item')),
+      name: finalName,
       description: description.trim(),
       sku: sku.trim() || 'SKU-' + Date.now().toString().slice(-6),
-      category: category.trim(),
-      brand: brand.trim(),
+      category: finalCategory,
+      brand: finalBrand,
       costPrice: parseFloat(costPrice) || 0,
       sellingPrice: parseFloat(sellingPrice) || 0,
-      minStock: parseInt(minStock, 10) || 5,
+      minStock: parsedSafetyStock,
       barcodes: barcode.trim() ? [barcode.trim()] : [],
       stockByLocation: [
         {
@@ -65,13 +71,10 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
     onSave(payload);
   };
 
-  const selectedLocName =
-    locations.find((l) => l._id === selectedLocationId)?.name || 'Default Location';
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
       <div className="bg-white w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-md sm:rounded-3xl flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-        {/* Header matching Screenshot 1 */}
+        {/* Header */}
         <div className="flex items-center px-4 py-4 border-b border-gray-100 relative">
           <button
             onClick={onClose}
@@ -80,23 +83,24 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             <X className="w-6 h-6" />
           </button>
           <h1 className="flex-1 text-center font-bold text-gray-900 text-lg mr-7">
-            New Item
+            Add New Item
           </h1>
         </div>
 
         {/* Scrollable Form Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-3 space-y-6">
-          {/* Quick Item Name / Barcode Input */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+          {/* Item Name & Barcode */}
           <div className="space-y-3">
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
-                Item / Model Name (Optional)
+                Item / Model Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
+                required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. vivo V29 5G (128GB)"
+                placeholder="e.g. iPhone 15 Pro Max / Vivo V29"
                 className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
               />
             </div>
@@ -109,8 +113,21 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. 50MP OIS Camera, Velvet Red, 8GB RAM"
+                placeholder="e.g. 256GB, Black Titanium, 8GB RAM"
                 className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
+                Custom SKU / Code (Optional)
+              </label>
+              <input
+                type="text"
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+                placeholder="e.g. VIVO-V29-128 (leave blank to auto-generate)"
+                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
               />
             </div>
 
@@ -124,109 +141,88 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             )}
           </div>
 
-          {/* Section 1: Attributes */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-1.5">
-                <span className="font-bold text-gray-900 text-base">Attributes</span>
-                <HelpCircle className="w-4 h-4 text-gray-400" />
-              </div>
-              <button type="button" className="text-blue-600 text-sm font-semibold hover:underline">
-                Edit
-              </button>
+          {/* Section 1: Attributes (Category & Brand) */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
+            <div className="flex items-center space-x-1.5">
+              <span className="font-bold text-gray-900 text-base">Category & Brand</span>
+              <HelpCircle className="w-4 h-4 text-gray-400" />
             </div>
 
             {/* Category Row */}
-            <div className="flex items-center justify-between pt-1 border-b border-gray-50 pb-3">
-              <span className="text-gray-500 text-sm font-medium">Category</span>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="text-right text-gray-900 font-medium text-sm bg-transparent focus:outline-none focus:underline max-w-[150px]"
-                />
-                {category && (
-                  <button type="button" onClick={() => setCategory('')} className="text-gray-400 hover:text-gray-600">
-                    <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-600 font-bold">✕</div>
-                  </button>
-                )}
-              </div>
+            <div className="flex items-center justify-between border-b border-gray-50 pb-2.5">
+              <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Category</span>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="e.g. Mobile Phones"
+                className="text-right text-gray-900 font-medium text-sm bg-transparent focus:outline-none placeholder-gray-400 w-48"
+              />
             </div>
 
             {/* Brand Row */}
             <div className="flex items-center justify-between pt-1">
-              <span className="text-gray-500 text-sm font-medium">Brand</span>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  className="text-right text-gray-900 font-medium text-sm bg-transparent focus:outline-none focus:underline max-w-[150px]"
-                />
-                {brand && (
-                  <button type="button" onClick={() => setBrand('')} className="text-gray-400 hover:text-gray-600">
-                    <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-600 font-bold">✕</div>
-                  </button>
-                )}
-              </div>
+              <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Brand</span>
+              <input
+                type="text"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                placeholder="e.g. Apple / Samsung"
+                className="text-right text-gray-900 font-medium text-sm bg-transparent focus:outline-none placeholder-gray-400 w-48"
+              />
             </div>
           </div>
 
           {/* Section 2: Pricing */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-4">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
             <h2 className="font-bold text-gray-900 text-base">Pricing</h2>
 
             {/* Cost Row */}
-            <div className="flex items-center justify-between border-b border-gray-50 pb-3">
-              <span className="text-gray-500 text-sm font-medium">Cost</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-gray-900 font-medium text-sm">₹</span>
+            <div className="flex items-center justify-between border-b border-gray-50 pb-2.5">
+              <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Cost Price</span>
+              <div className="flex items-center space-x-1">
+                <span className="text-gray-900 font-semibold text-sm">₹</span>
                 <input
                   type="number"
+                  min="0"
+                  step="any"
                   value={costPrice}
                   onChange={(e) => setCostPrice(e.target.value)}
-                  className="text-right text-gray-900 font-semibold text-sm bg-transparent focus:outline-none focus:underline w-24"
+                  placeholder="0"
+                  className="text-right text-gray-900 font-semibold text-sm bg-transparent focus:outline-none w-28 placeholder-gray-400"
                 />
-                {costPrice && (
-                  <button type="button" onClick={() => setCostPrice('')} className="text-gray-400 hover:text-gray-600">
-                    <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-600 font-bold">✕</div>
-                  </button>
-                )}
               </div>
             </div>
 
             {/* Price Row */}
             <div className="flex items-center justify-between pt-1">
-              <span className="text-gray-500 text-sm font-medium">Price</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-gray-900 font-medium text-sm">₹</span>
+              <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Selling Price</span>
+              <div className="flex items-center space-x-1">
+                <span className="text-gray-900 font-semibold text-sm">₹</span>
                 <input
                   type="number"
+                  min="0"
+                  step="any"
                   value={sellingPrice}
                   onChange={(e) => setSellingPrice(e.target.value)}
-                  className="text-right text-gray-900 font-semibold text-sm bg-transparent focus:outline-none focus:underline w-24"
+                  placeholder="0"
+                  className="text-right text-gray-900 font-semibold text-sm bg-transparent focus:outline-none w-28 placeholder-gray-400"
                 />
-                {sellingPrice && (
-                  <button type="button" onClick={() => setSellingPrice('')} className="text-gray-400 hover:text-gray-600">
-                    <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-600 font-bold">✕</div>
-                  </button>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Section 3: Starting Quantity */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-4">
-            <h2 className="font-bold text-gray-900 text-base">Starting Quantity</h2>
+          {/* Section 3: Starting Quantity & Location */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
+            <h2 className="font-bold text-gray-900 text-base">Initial Stock Quantity</h2>
 
             {/* Location Selector */}
-            <div className="flex items-center justify-between border-b border-gray-50 pb-3">
-              <span className="text-gray-500 text-sm font-medium">Location</span>
+            <div className="flex items-center justify-between border-b border-gray-50 pb-2.5">
+              <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Location</span>
               <select
                 value={selectedLocationId}
                 onChange={(e) => setSelectedLocationId(e.target.value)}
-                className="text-right text-gray-900 font-medium text-sm bg-transparent focus:outline-none cursor-pointer pr-1"
+                className="text-right text-gray-900 font-semibold text-sm bg-transparent focus:outline-none cursor-pointer pr-1"
               >
                 {locations.map((loc) => (
                   <option key={loc._id} value={loc._id}>
@@ -238,27 +234,53 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
 
             {/* Quantity Input */}
             <div className="flex items-center justify-between pt-1">
-              <span className="text-gray-500 text-sm font-medium">Quantity</span>
-              <div className="flex items-center space-x-1.5">
+              <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Starting Stock</span>
+              <div className="flex items-center space-x-1">
                 <input
                   type="number"
+                  min="0"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
-                  className="text-right text-gray-900 font-semibold text-sm bg-transparent focus:outline-none w-24"
+                  placeholder="0"
+                  className="text-right text-gray-900 font-black text-sm bg-transparent focus:outline-none w-28 placeholder-gray-400"
                 />
-                <ChevronRight className="w-4 h-4 text-gray-400" />
+                <span className="text-gray-500 text-xs">pcs</span>
               </div>
             </div>
           </div>
 
-          {/* Bottom Save Button Matching Screenshot 1 */}
+          {/* Section 4: Safety Stock / Shortage Threshold */}
+          <div className="bg-amber-50/60 rounded-2xl border border-amber-200/80 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <ShieldAlert className="w-5 h-5 text-amber-600" />
+                <h2 className="font-bold text-amber-900 text-sm">Safety Stock (Shortage Level)</h2>
+              </div>
+              <div className="flex items-center space-x-1">
+                <input
+                  type="number"
+                  min="0"
+                  value={minStock}
+                  onChange={(e) => setMinStock(e.target.value)}
+                  placeholder="e.g. 5"
+                  className="text-right text-gray-900 font-black text-sm bg-white px-2 py-1 rounded-lg border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 w-20"
+                />
+                <span className="text-amber-800 text-xs font-semibold">pcs</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-amber-800/90 leading-relaxed">
+              When total stock falls <strong>below or equal to</strong> this quantity, this item will automatically show in <strong>View Shortages</strong> and <strong>Shortages by Date</strong>.
+            </p>
+          </div>
+
+          {/* Bottom Save Button */}
           <div className="pt-2 pb-6">
             <button
               type="submit"
               disabled={loading}
               className="w-full py-3.5 px-4 bg-[#4965fa] hover:bg-blue-600 active:bg-blue-700 text-white font-bold text-base rounded-2xl shadow-md shadow-blue-500/25 transition-all duration-150 disabled:opacity-50"
             >
-              {loading ? 'Saving...' : 'Save'}
+              {loading ? 'Saving...' : 'Save Item'}
             </button>
           </div>
         </form>

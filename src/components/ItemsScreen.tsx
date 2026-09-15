@@ -25,15 +25,24 @@ export const ItemsScreen: React.FC<ItemsScreenProps> = ({
   onStockInItem,
   onStockOutItem,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedFilter, setSelectedFilter] = useState<string>('all');
+
+  const shortageCount = items.filter((item) => item.totalStock <= item.minStock).length;
 
   const filteredItems = items.filter((item) => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.barcodes.some((b) => b.includes(searchQuery));
-    const matchesCat = selectedCategory === 'all' || item.category.toLowerCase() === selectedCategory.toLowerCase();
-    return matchesSearch && matchesCat;
+
+    let matchesFilter = true;
+    if (selectedFilter === 'shortages') {
+      matchesFilter = item.totalStock <= item.minStock;
+    } else if (selectedFilter !== 'all') {
+      matchesFilter = item.category.toLowerCase() === selectedFilter.toLowerCase();
+    }
+
+    return matchesSearch && matchesFilter;
   });
 
   return (
@@ -59,24 +68,37 @@ export const ItemsScreen: React.FC<ItemsScreenProps> = ({
         </button>
       </div>
 
-      {/* Category Filter Pills */}
+      {/* Category & Shortage Filter Pills */}
       <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar py-1">
         <button
-          onClick={() => setSelectedCategory('all')}
+          onClick={() => setSelectedFilter('all')}
           className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors ${
-            selectedCategory === 'all'
+            selectedFilter === 'all'
               ? 'bg-[#4965fa] text-white shadow-xs'
               : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
           }`}
         >
           All Items ({items.length})
         </button>
+
+        {/* Shortages Filter Pill */}
+        <button
+          onClick={() => setSelectedFilter('shortages')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors flex items-center space-x-1 ${
+            selectedFilter === 'shortages'
+              ? 'bg-amber-500 text-white shadow-xs'
+              : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+          }`}
+        >
+          <span>⚠️ Shortages ({shortageCount})</span>
+        </button>
+
         {categories.map((cat) => (
           <button
             key={cat}
-            onClick={() => setSelectedCategory(cat)}
+            onClick={() => setSelectedFilter(cat)}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize whitespace-nowrap transition-colors ${
-              selectedCategory === cat
+              selectedFilter === cat
                 ? 'bg-[#4965fa] text-white shadow-xs'
                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
             }`}
