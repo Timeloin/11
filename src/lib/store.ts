@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { IItem, ILocation, IStockTransaction, ITeam, ITeamMember, Role, CustomPermissions, ISubAdminInfo, UserSession } from '@/types';
 import { connectDB } from './db';
 import { SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, hashPassword, comparePassword } from './auth';
@@ -89,13 +90,11 @@ let demoCategories: string[] = ['mobile phone', 'accessories', 'smartwatch', 'ta
 let demoBrands: string[] = ['vivo', 'samsung', 'apple', 'oneplus', 'generic', 'boat'];
 
 export class InventoryStore {
-  // Authentication & Access Verification
+  // Authentication: 1 Main Admin + Staff Members (No expiration limits)
   static async authenticateUser(email: string, pass: string): Promise<{
     success: boolean;
     error?: string;
     session?: UserSession;
-    accessDenied?: boolean;
-    accessReason?: string;
   }> {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = pass.trim();
@@ -103,40 +102,56 @@ export class InventoryStore {
     const envAdminEmail = (process.env.SUPER_ADMIN_EMAIL || SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
     const envAdminPass = process.env.SUPER_ADMIN_PASSWORD || SUPER_ADMIN_PASSWORD || '';
 
-    // 1. Super Admin direct login
+    // 1. Main Admin direct login using Vercel env credentials
     if (envAdminEmail && envAdminPass && cleanEmail === envAdminEmail && cleanPass === envAdminPass) {
+      let mainTeamId = 'team_1';
+      if (process.env.MONGODB_URI) {
+        try {
+          await connectDB();
+          let team = await Team.findOne({}).sort({ createdAt: 1 });
+          if (!team) {
+            team = await Team.create({
+              name: 'Simran Mobile',
+              ownerEmail: envAdminEmail,
+              ownerName: 'Main Admin',
+              inviteCode: 'SIMRAN88',
+              currency: '₹',
+            });
+          }
+          mainTeamId = team._id.toString();
+        } catch (e) {
+          console.error('Error fetching main team on admin login:', e);
+        }
+      }
+
       return {
         success: true,
         session: {
-          userId: 'user_superadmin',
-          name: 'Super Admin',
+          userId: 'user_main_admin',
+          name: 'Main Admin',
           email: envAdminEmail,
-          role: 'superadmin',
-          isSuperAdmin: true,
-          subscription: {
-            type: 'lifetime',
-            isRevoked: false,
-            isValid: true,
-          }
-        }
+          role: 'admin',
+          activeTeamId: mainTeamId,
+          isSuperAdmin: false,
+        },
       };
     }
 
-    // 2. Check MongoDB
+    // 2. Check MongoDB for staff members / users
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
         const user = await User.findOne({ email: cleanEmail });
         if (user) {
-          const isMatch = (user.plainPassword && user.plainPassword === cleanPass) || (await comparePassword(cleanPass, user.passwordHash || ''));
+          const isMatch =
+            (user.plainPassword && user.plainPassword === cleanPass) ||
+            (await comparePassword(cleanPass, user.passwordHash || ''));
           if (isMatch) {
-            // Find user's team
             let team = await Team.findOne({ ownerId: user._id });
             let memberRole: Role = user.role || 'admin';
             let customPerms: CustomPermissions | undefined = undefined;
 
             if (!team) {
-              // Check if team member
               const membership = await TeamMember.findOne({ userId: user._id });
               if (membership) {
                 team = await Team.findById(membership.teamId);
@@ -145,41 +160,22 @@ export class InventoryStore {
               }
             }
 
-            if (team) {
-              const subCheck = this.calculateSubscription(team);
-              if (!subCheck.isValid) {
-                return {
-                  success: false,
-                  accessDenied: true,
-                  accessReason: subCheck.isRevoked 
-                    ? 'Access to this shop has been revoked by Super Admin.' 
-                    : 'Your shop subscription has expired. Please contact Super Admin to extend access.',
-                  session: {
-                    userId: user._id.toString(),
-                    name: user.name,
-                    email: user.email,
-                    activeTeamId: team._id.toString(),
-                    role: memberRole,
-                    isSuperAdmin: false,
-                    subscription: subCheck,
-                  }
-                };
-              }
-
-              return {
-                success: true,
-                session: {
-                  userId: user._id.toString(),
-                  name: user.name,
-                  email: user.email,
-                  activeTeamId: team._id.toString(),
-                  role: memberRole,
-                  isSuperAdmin: false,
-                  permissions: customPerms,
-                  subscription: subCheck,
-                }
-              };
+            if (!team) {
+              team = await Team.findOne({}).sort({ createdAt: 1 });
             }
+
+            return {
+              success: true,
+              session: {
+                userId: user._id.toString(),
+                name: user.name,
+                email: user.email,
+                activeTeamId: team ? team._id.toString() : 'team_1',
+                role: memberRole,
+                isSuperAdmin: false,
+                permissions: customPerms,
+              },
+            };
           }
         }
       } catch (err) {
@@ -188,53 +184,31 @@ export class InventoryStore {
     }
 
     // 3. Fallback demo memory auth
-    const memUser = demoUsers.find(u => u.email === cleanEmail && (u.plainPassword === cleanPass || cleanPass === 'password123'));
+    const memUser = demoUsers.find(
+      (u) => u.email === cleanEmail && (u.plainPassword === cleanPass || cleanPass === 'password123')
+    );
     if (memUser) {
-      const team = demoTeams.find(t => t.ownerId === memUser._id || t._id === memUser.defaultTeamId) || demoTeams[0];
-      const subCheck = this.calculateSubscription(team);
-      if (!subCheck.isValid) {
-        return {
-          success: false,
-          accessDenied: true,
-          accessReason: subCheck.isRevoked ? 'Access Revoked by Super Admin' : 'Subscription Expired',
-          session: {
-            userId: memUser._id,
-            name: memUser.name,
-            email: memUser.email,
-            activeTeamId: team?._id,
-            role: memUser.role,
-            isSuperAdmin: memUser.isSuperAdmin,
-            subscription: subCheck,
-          }
-        };
-      }
-
+      const team =
+        demoTeams.find((t) => t.ownerId === memUser._id || t._id === memUser.defaultTeamId) || demoTeams[0];
       return {
         success: true,
         session: {
           userId: memUser._id,
           name: memUser.name,
           email: memUser.email,
-          activeTeamId: team?._id,
-          role: memUser.role,
-          isSuperAdmin: memUser.isSuperAdmin,
-          subscription: subCheck,
-        }
+          activeTeamId: team?._id || 'team_1',
+          role: memUser.role || 'admin',
+          isSuperAdmin: false,
+        },
       };
     }
 
     // Also check demo members
-    const memStaff = demoMembers.find(m => m.email.toLowerCase() === cleanEmail && (m.password === cleanPass || cleanPass === 'password123'));
+    const memStaff = demoMembers.find(
+      (m) => m.email.toLowerCase() === cleanEmail && (m.password === cleanPass || cleanPass === 'password123')
+    );
     if (memStaff) {
-      const team = demoTeams.find(t => t._id === memStaff.teamId) || demoTeams[0];
-      const subCheck = this.calculateSubscription(team);
-      if (!subCheck.isValid) {
-        return {
-          success: false,
-          accessDenied: true,
-          accessReason: 'Shop access is suspended or expired.',
-        };
-      }
+      const team = demoTeams.find((t) => t._id === memStaff.teamId) || demoTeams[0];
       return {
         success: true,
         session: {
@@ -245,284 +219,189 @@ export class InventoryStore {
           role: memStaff.role,
           isSuperAdmin: false,
           permissions: memStaff.customPermissions,
-          subscription: subCheck,
-        }
+        },
       };
     }
 
     return { success: false, error: 'Invalid email or password' };
   }
 
-  // Calculate remaining days & active status
-  static calculateSubscription(team: any) {
-    if (!team) return { type: 'days' as const, isRevoked: true, isValid: false, daysRemaining: 0 };
-    if (team.isAccessRevoked) {
-      return { type: team.subscriptionType || 'days', isRevoked: true, isValid: false, daysRemaining: 0 };
-    }
-    if (team.subscriptionType === 'lifetime') {
-      return { type: 'lifetime' as const, isRevoked: false, isValid: true, daysRemaining: 9999 };
-    }
+  // Bulk CSV Item Import
+  static async importItems(
+    teamId: string,
+    itemsList: any[],
+    operatorName: string = 'Main Admin'
+  ): Promise<{ success: boolean; count: number; imported: number; updated: number }> {
+    let imported = 0;
+    let updated = 0;
 
-    const expiryTime = team.subscriptionExpiresAt ? new Date(team.subscriptionExpiresAt).getTime() : 0;
-    const now = Date.now();
-    const diffDays = Math.ceil((expiryTime - now) / (1000 * 60 * 60 * 24));
-    const isValid = diffDays > 0;
-
-    return {
-      type: 'days' as const,
-      expiresAt: team.subscriptionExpiresAt ? new Date(team.subscriptionExpiresAt).toISOString() : undefined,
-      isRevoked: false,
-      daysRemaining: Math.max(0, diffDays),
-      isValid,
-    };
-  }
-
-  // Super Admin: List All Sub-Admins & Shops
-  static async listSubAdmins(): Promise<ISubAdminInfo[]> {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        const teams = await Team.find({}).sort({ createdAt: -1 }).lean();
-        const result: ISubAdminInfo[] = [];
+        let targetTeamId = teamId;
+        if (!mongoose.isValidObjectId(targetTeamId) || targetTeamId === 'team_1') {
+          const firstTeam = await Team.findOne({}).sort({ createdAt: 1 });
+          if (firstTeam) targetTeamId = firstTeam._id.toString();
+        }
 
-        for (const t of teams) {
-          const user = await User.findById(t.ownerId).lean();
-          const sub = this.calculateSubscription(t);
-          const membersCount = await TeamMember.countDocuments({ teamId: t._id });
-          const itemsCount = await Item.countDocuments({ teamId: t._id, isArchived: false });
-
-          result.push({
-            userId: t.ownerId?.toString() || '',
-            name: t.ownerName || user?.name || 'Sub-Admin',
-            email: t.ownerEmail || user?.email || '',
-            teamId: t._id.toString(),
-            shopName: t.name,
-            subscriptionType: t.subscriptionType || 'days',
-            subscriptionExpiresAt: t.subscriptionExpiresAt ? new Date(t.subscriptionExpiresAt).toISOString() : undefined,
-            isAccessRevoked: !!t.isAccessRevoked,
-            daysRemaining: sub.daysRemaining,
-            isValid: sub.isValid,
-            membersCount,
-            itemsCount,
-            createdAt: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString(),
+        let defaultLoc = await Location.findOne({ teamId: targetTeamId, isDefault: true });
+        if (!defaultLoc) {
+          defaultLoc = await Location.findOne({ teamId: targetTeamId });
+        }
+        if (!defaultLoc) {
+          defaultLoc = await Location.create({
+            teamId: targetTeamId,
+            name: 'Main Store',
+            isDefault: true,
+            isArchived: false,
           });
         }
-        return result;
-      } catch (err) {
-        console.error('MongoDB listSubAdmins error:', err);
+
+        for (const raw of itemsList) {
+          const name = String(raw.name || raw['Item Name'] || raw['Product Name'] || '').trim();
+          if (!name) continue;
+
+          const sku = String(
+            raw.sku ||
+              raw.SKU ||
+              raw['Item Code'] ||
+              `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`
+          ).trim();
+          const category = String(raw.category || raw.Category || 'General').trim().toLowerCase();
+          const brand = String(raw.brand || raw.Brand || 'Generic').trim().toLowerCase();
+          const unit = String(raw.unit || raw.Unit || 'pcs').trim();
+          const costPrice = Number(raw.costPrice || raw['Cost Price'] || raw.Cost || 0) || 0;
+          const sellingPrice = Number(raw.sellingPrice || raw['Selling Price'] || raw.Price || 0) || 0;
+          const totalStock =
+            Number(raw.totalStock || raw['Total Stock'] || raw.Stock || raw.Quantity || 0) || 0;
+          const minStock = Number(raw.minStock || raw['Safety Stock'] || raw['Min Stock'] || 5) || 5;
+          const barcodes = raw.barcodes || (raw.Barcode ? [String(raw.Barcode).trim()] : []);
+
+          let existingItem = await Item.findOne({ teamId: targetTeamId, sku });
+          if (!existingItem) {
+            existingItem = await Item.findOne({
+              teamId: targetTeamId,
+              name: { $regex: new RegExp(`^${name}$`, 'i') },
+            });
+          }
+
+          if (existingItem) {
+            existingItem.costPrice = costPrice || existingItem.costPrice;
+            existingItem.sellingPrice = sellingPrice || existingItem.sellingPrice;
+            existingItem.minStock = minStock || existingItem.minStock;
+            if (totalStock > 0) {
+              existingItem.totalStock += totalStock;
+              const locEntry = existingItem.stockByLocation.find(
+                (l: any) => l.locationId === defaultLoc._id.toString()
+              );
+              if (locEntry) {
+                locEntry.quantity += totalStock;
+              } else {
+                existingItem.stockByLocation.push({
+                  locationId: defaultLoc._id.toString(),
+                  locationName: defaultLoc.name,
+                  quantity: totalStock,
+                });
+              }
+            }
+            await existingItem.save();
+            updated++;
+          } else {
+            const newItem = await Item.create({
+              teamId: targetTeamId,
+              sku,
+              name,
+              category,
+              brand,
+              unit,
+              costPrice,
+              sellingPrice,
+              totalStock,
+              minStock,
+              barcodes,
+              images: [],
+              stockByLocation: [
+                {
+                  locationId: defaultLoc._id.toString(),
+                  locationName: defaultLoc.name,
+                  quantity: totalStock,
+                },
+              ],
+            });
+
+            if (totalStock > 0) {
+              await StockTransaction.create({
+                teamId: targetTeamId,
+                type: 'stock_in',
+                referenceNo: `IMP-${Date.now().toString().slice(-6)}`,
+                toLocationId: defaultLoc._id.toString(),
+                toLocationName: defaultLoc.name,
+                items: [
+                  { itemId: newItem._id.toString(), sku, name, quantity: totalStock, unitCost: costPrice },
+                ],
+                totalQuantity: totalStock,
+                reason: 'CSV Bulk Import',
+                userId: 'user_admin',
+                userName: operatorName,
+              });
+            }
+            imported++;
+          }
+        }
+
+        return { success: true, count: itemsList.length, imported, updated };
+      } catch (e: any) {
+        console.error('Error importing items to DB:', e);
       }
     }
 
-    return demoTeams.map(t => {
-      const sub = this.calculateSubscription(t);
-      return {
-        userId: t.ownerId,
-        name: t.ownerName || 'Simran Sub-Admin',
-        email: t.ownerEmail || 'subadmin@simranmobile.com',
-        teamId: t._id,
-        shopName: t.name,
-        subscriptionType: t.subscriptionType || 'days',
-        subscriptionExpiresAt: t.subscriptionExpiresAt,
-        isAccessRevoked: t.isAccessRevoked,
-        daysRemaining: sub.daysRemaining,
-        isValid: sub.isValid,
-        membersCount: demoMembers.filter(m => m.teamId === t._id).length,
-        itemsCount: demoItems.filter(i => i.teamId === t._id && !i.isArchived).length,
-        createdAt: t.createdAt,
-      };
-    });
-  }
+    // In-memory fallback
+    for (const raw of itemsList) {
+      const name = String(raw.name || raw['Item Name'] || raw['Product Name'] || '').trim();
+      if (!name) continue;
+      const sku = String(raw.sku || raw.SKU || `SKU-${Date.now().toString().slice(-6)}`).trim();
+      const costPrice = Number(raw.costPrice || raw['Cost Price'] || 0) || 0;
+      const sellingPrice = Number(raw.sellingPrice || raw['Selling Price'] || 0) || 0;
+      const totalStock = Number(raw.totalStock || raw['Total Stock'] || 0) || 0;
+      const minStock = Number(raw.minStock || raw['Safety Stock'] || 5) || 5;
 
-  // Super Admin: Create Sub-Admin
-  static async createSubAdmin(data: {
-    name: string;
-    email: string;
-    password: string;
-    shopName: string;
-    subscriptionType: 'days' | 'lifetime';
-    days?: number;
-  }): Promise<ISubAdminInfo> {
-    const cleanEmail = data.email.trim().toLowerCase();
-    const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const days = data.days || 10;
-    const expiresAt = data.subscriptionType === 'lifetime' 
-      ? undefined 
-      : new Date(Date.now() + days * 86400000);
-
-    if (process.env.MONGODB_URI) {
-      try {
-        await connectDB();
-        const pHash = await hashPassword(data.password);
-        
-        let user = await User.findOne({ email: cleanEmail });
-        if (!user) {
-          user = await User.create({
-            name: data.name,
-            email: cleanEmail,
-            passwordHash: pHash,
-            plainPassword: data.password,
-            role: 'admin',
-            isSuperAdmin: false,
-          });
-        } else {
-          user.plainPassword = data.password;
-          user.passwordHash = pHash;
-          await user.save();
-        }
-
-        const team = await Team.create({
-          name: data.shopName,
-          ownerId: user._id,
-          ownerEmail: cleanEmail,
-          ownerName: data.name,
-          inviteCode,
-          currency: '₹',
-          subscriptionType: data.subscriptionType,
-          subscriptionDays: days,
-          subscriptionExpiresAt: expiresAt,
-          isAccessRevoked: false,
-        });
-
-        await Location.create({
-          teamId: team._id,
-          name: 'Default Location',
-          isDefault: true,
+      const existing = demoItems.find(
+        (i) => i.sku === sku || i.name.toLowerCase() === name.toLowerCase()
+      );
+      if (existing) {
+        existing.totalStock += totalStock;
+        existing.costPrice = costPrice || existing.costPrice;
+        existing.sellingPrice = sellingPrice || existing.sellingPrice;
+        existing.minStock = minStock;
+        updated++;
+      } else {
+        demoItems.push({
+          _id: 'item_' + Date.now() + Math.random().toString().slice(-4),
+          teamId,
+          sku,
+          name,
+          category: String(raw.category || 'General').toLowerCase(),
+          brand: String(raw.brand || 'Generic').toLowerCase(),
+          unit: 'pcs',
+          costPrice,
+          sellingPrice,
+          totalStock,
+          minStock,
+          barcodes: raw.barcodes || [],
+          images: [],
+          stockByLocation: [{ locationId: 'loc_1', locationName: 'Default Location', quantity: totalStock }],
           isArchived: false,
-        });
-
-        user.defaultTeamId = team._id;
-        await user.save();
-
-        const sub = this.calculateSubscription(team);
-        return {
-          userId: user._id.toString(),
-          name: user.name,
-          email: user.email,
-          teamId: team._id.toString(),
-          shopName: team.name,
-          subscriptionType: team.subscriptionType,
-          subscriptionExpiresAt: expiresAt ? expiresAt.toISOString() : undefined,
-          isAccessRevoked: false,
-          daysRemaining: sub.daysRemaining,
-          isValid: sub.isValid,
-          membersCount: 0,
-          itemsCount: 0,
           createdAt: new Date().toISOString(),
-        };
-      } catch (err) {
-        console.error('MongoDB createSubAdmin error:', err);
+          updatedAt: new Date().toISOString(),
+        });
+        imported++;
       }
     }
 
-    const userId = 'user_' + Math.random().toString(36).substr(2, 7);
-    const teamId = 'team_' + Math.random().toString(36).substr(2, 7);
-
-    demoUsers.push({
-      _id: userId,
-      name: data.name,
-      email: cleanEmail,
-      plainPassword: data.password,
-      role: 'admin',
-      isSuperAdmin: false,
-      defaultTeamId: teamId,
-    });
-
-    const newTeam: ITeam = {
-      _id: teamId,
-      name: data.shopName,
-      ownerId: userId,
-      ownerEmail: cleanEmail,
-      ownerName: data.name,
-      inviteCode,
-      currency: '₹',
-      lowStockThresholdDefault: 5,
-      subscriptionType: data.subscriptionType,
-      subscriptionDays: days,
-      subscriptionExpiresAt: expiresAt ? expiresAt.toISOString() : undefined,
-      isAccessRevoked: false,
-      createdAt: new Date().toISOString(),
-    };
-    demoTeams.unshift(newTeam);
-
-    demoLocations.push({
-      _id: 'loc_' + Math.random().toString(36).substr(2, 7),
-      teamId,
-      name: 'Default Location',
-      isDefault: true,
-      isArchived: false,
-      createdAt: new Date().toISOString(),
-    });
-
-    const sub = this.calculateSubscription(newTeam);
-    return {
-      userId,
-      name: data.name,
-      email: cleanEmail,
-      teamId,
-      shopName: data.shopName,
-      subscriptionType: data.subscriptionType,
-      subscriptionExpiresAt: expiresAt ? expiresAt.toISOString() : undefined,
-      isAccessRevoked: false,
-      daysRemaining: sub.daysRemaining,
-      isValid: sub.isValid,
-      membersCount: 0,
-      itemsCount: 0,
-      createdAt: new Date().toISOString(),
-    };
+    return { success: true, count: itemsList.length, imported, updated };
   }
 
-  // Super Admin: Update Subscription Days / Lifetime / Revoke
-  static async updateSubAdminSubscription(teamId: string, update: {
-    subscriptionType?: 'days' | 'lifetime';
-    addDays?: number;
-    setDays?: number;
-    isAccessRevoked?: boolean;
-  }): Promise<boolean> {
-    if (process.env.MONGODB_URI) {
-      try {
-        await connectDB();
-        const team = await Team.findById(teamId);
-        if (!team) return false;
-
-        if (update.subscriptionType) team.subscriptionType = update.subscriptionType;
-        if (typeof update.isAccessRevoked === 'boolean') team.isAccessRevoked = update.isAccessRevoked;
-
-        if (update.subscriptionType === 'lifetime') {
-          team.subscriptionExpiresAt = undefined;
-        } else if (update.addDays) {
-          const currentExpiry = team.subscriptionExpiresAt ? new Date(team.subscriptionExpiresAt).getTime() : Date.now();
-          const base = Math.max(Date.now(), currentExpiry);
-          team.subscriptionExpiresAt = new Date(base + update.addDays * 86400000);
-        } else if (update.setDays) {
-          team.subscriptionExpiresAt = new Date(Date.now() + update.setDays * 86400000);
-        }
-
-        await team.save();
-        return true;
-      } catch (err) {
-        console.error('MongoDB updateSubAdmin error:', err);
-      }
-    }
-
-    const t = demoTeams.find(team => team._id === teamId);
-    if (!t) return false;
-
-    if (update.subscriptionType) t.subscriptionType = update.subscriptionType;
-    if (typeof update.isAccessRevoked === 'boolean') t.isAccessRevoked = update.isAccessRevoked;
-
-    if (update.subscriptionType === 'lifetime') {
-      t.subscriptionExpiresAt = undefined;
-    } else if (update.addDays) {
-      const currentExpiry = t.subscriptionExpiresAt ? new Date(t.subscriptionExpiresAt).getTime() : Date.now();
-      const base = Math.max(Date.now(), currentExpiry);
-      t.subscriptionExpiresAt = new Date(base + update.addDays * 86400000).toISOString();
-    } else if (update.setDays) {
-      t.subscriptionExpiresAt = new Date(Date.now() + update.setDays * 86400000).toISOString();
-    }
-    return true;
-  }
-
-  // Sub-Admin: Add Staff Member with Email & Password
+  // Add Staff Member with Email & Password
   static async addMemberWithCredentials(teamId: string, memberData: {
     name: string;
     email: string;

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   MapPin,
@@ -26,6 +26,7 @@ interface SettingsScreenProps {
   onOpenInvite: () => void;
   onAddLocation: (name: string) => Promise<void>;
   onExportData: () => void;
+  onOpenImportData?: () => void;
 }
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
@@ -38,6 +39,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onOpenInvite,
   onAddLocation,
   onExportData,
+  onOpenImportData,
 }) => {
   const [newLocName, setNewLocName] = useState('');
   const [addingLoc, setAddingLoc] = useState(false);
@@ -504,22 +506,37 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       </div>
 
-      {/* Data Export & Backup */}
+      {/* Data Import, Export & Backup */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
         <div className="flex items-center space-x-2">
           <Download className="w-5 h-5 text-emerald-600" />
-          <h3 className="font-bold text-gray-900 text-sm">Backup & Export</h3>
+          <h3 className="font-bold text-gray-900 text-sm">Data Backup & Excel/CSV</h3>
         </div>
-        <p className="text-xs text-gray-500">
-          Export your entire inventory catalog and transaction records to CSV / Excel spreadsheet.
+        <p className="text-xs text-gray-500 leading-relaxed">
+          Import new stock items from a CSV spreadsheet, or export your full catalog and transaction history.
         </p>
-        <button
-          onClick={onExportData}
-          className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 transition-colors flex items-center justify-center space-x-1.5"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Stock Sheet (.CSV)</span>
-        </button>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          {onOpenImportData && (
+            <button
+              type="button"
+              onClick={onOpenImportData}
+              className="py-2.5 px-3 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition-colors flex items-center justify-center space-x-1.5 shadow-xs"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import CSV</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onExportData}
+            className={`py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 transition-colors flex items-center justify-center space-x-1.5 shadow-xs ${
+              !onOpenImportData ? 'col-span-2' : ''
+            }`}
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Database Connection Notice */}

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { InventoryStore } from '@/lib/store';
 import { signToken } from '@/lib/auth';
 
@@ -10,15 +10,6 @@ export async function POST(req: Request) {
     }
 
     const authResult = await InventoryStore.authenticateUser(email, password);
-
-    if (authResult.accessDenied) {
-      return NextResponse.json({
-        success: false,
-        accessDenied: true,
-        reason: authResult.accessReason,
-        session: authResult.session,
-      }, { status: 403 });
-    }
 
     if (!authResult.success || !authResult.session) {
       return NextResponse.json({ error: authResult.error || 'Invalid credentials' }, { status: 401 });

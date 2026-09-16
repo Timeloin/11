@@ -14,18 +14,13 @@ import { StockActionModal } from '@/components/modals/StockActionModal';
 import { InviteMemberModal } from '@/components/modals/InviteMemberModal';
 import { ItemDetailModal } from '@/components/modals/ItemDetailModal';
 import { ShortagesModal } from '@/components/modals/ShortagesModal';
+import { CsvImportModal } from '@/components/modals/CsvImportModal';
 import { LoginScreen } from '@/components/LoginScreen';
-import { SuperAdminDashboard } from '@/components/SuperAdminDashboard';
-import { AccessExpiredScreen } from '@/components/AccessExpiredScreen';
 import { IItem, ILocation, IStockTransaction, ITeam, ITeamMember, TransactionType, UserSession } from '@/types';
 
 export default function App() {
   const [session, setSession] = useState<UserSession | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
-  const [accessDeniedReason, setAccessDeniedReason] = useState<string | null>(null);
-
-  // Super admin viewing specific shop mode
-  const [viewingShopTeamId, setViewingShopTeamId] = useState<string | null>(null);
 
   // App Tabs & Navigation
   const [activeTab, setActiveTab] = useState<TabType>('home');
@@ -46,13 +41,14 @@ export default function App() {
     stockInToday: 0,
     stockOutToday: 0,
     lowStockCount: 0,
-    todayDateStr: 'Sep 14',
+    todayDateStr: 'Sep 16',
   });
 
   // Modals state
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
   const [shortagesModalConfig, setShortagesModalConfig] = useState<{
     isOpen: boolean;
     mode: 'current' | 'by_date';
@@ -86,7 +82,6 @@ export default function App() {
 
   const handleLoginSuccess = (userSession: UserSession, token: string) => {
     setSession(userSession);
-    setAccessDeniedReason(null);
     try {
       localStorage.setItem('inventory_session', JSON.stringify(userSession));
       localStorage.setItem('inventory_token', token);
@@ -95,8 +90,6 @@ export default function App() {
 
   const handleLogout = () => {
     setSession(null);
-    setViewingShopTeamId(null);
-    setAccessDeniedReason(null);
     try {
       localStorage.removeItem('inventory_session');
       localStorage.removeItem('inventory_token');
@@ -112,11 +105,11 @@ export default function App() {
     }, 2500);
   };
 
-  // Fetch shop inventory data (using single fast /api/sync)
+  // Fetch shop inventory data
   const loadData = useCallback(async () => {
     if (!session) return;
     try {
-      const targetTeamId = viewingShopTeamId || currentTeam?._id || session.activeTeamId || 'team_1';
+      const targetTeamId = currentTeam?._id || session.activeTeamId || 'team_1';
       const syncRes = await fetch('/api/sync?teamId=' + targetTeamId).then((r) => r.json());
 
       if (syncRes.success) {
@@ -136,15 +129,15 @@ export default function App() {
     } catch (e) {
       console.error('Error syncing shop data:', e);
     }
-  }, [session, currentTeam, viewingShopTeamId]);
+  }, [session, currentTeam]);
 
   useEffect(() => {
-    if (session && (!session.isSuperAdmin || viewingShopTeamId)) {
+    if (session) {
       loadData();
     }
-  }, [session, viewingShopTeamId, loadData]);
+  }, [session, loadData]);
 
-  // Handlers with INSTANT Optimistic State Updates (0ms delay!)
+  // Handlers with instant optimistic updates
   const handleSaveItem = async (itemData: any) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
     const tempId = 'temp_' + Date.now();
@@ -172,13 +165,12 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. Instant local state update (0ms lag!)
     setItems((prev) => [optimisticItem, ...prev]);
     setMetrics((prev) => ({
       ...prev,
       totalItems: prev.totalItems + 1,
       stockInToday: prev.stockInToday + parsedStock,
-      totalInventoryValue: prev.totalInventoryValue + (parsedStock * parsedCost),
+      totalInventoryValue: prev.totalInventoryValue + parsedStock * parsedCost,
     }));
     if (itemData.category && !categories.includes(itemData.category.toLowerCase())) {
       setCategories((prev) => [...prev, itemData.category.toLowerCase()]);
@@ -189,7 +181,6 @@ export default function App() {
 
     showToast('⚡ Item created instantly!');
 
-    // 2. Background database persistence
     try {
       const res = await fetch('/api/items', {
         method: 'POST',
@@ -219,114 +210,126 @@ export default function App() {
       await fetch('/api/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: session.email, userName: newName }),
+        body: JSON.stringify({ userId: session.userId, name: newName }),
       });
     } catch (e) {
-      console.error('Profile update error:', e);
+      console.error('Error saving profile name:', e);
     }
   };
 
-  const handleExecuteTransaction = async (txnData: any) => {
+  const handleExecuteTransaction = async (data: any) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
-    const tempTxnId = 'txn_temp_' + Date.now();
-    const qty = Number(txnData.totalQuantity) || 0;
-    const currentOperator = session?.userName || session?.name || 'Admin';
-
-    // 1. Instant local state update (0ms lag!)
-    const optimisticTxn: IStockTransaction = {
-      _id: tempTxnId,
+    const operatorName = session?.userName || session?.name || 'Main Admin';
+    const txnPayload = {
+      ...data,
       teamId: activeTeamId,
-      type: txnData.type,
-      referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
-      fromLocationId: txnData.fromLocationId,
-      fromLocationName: txnData.fromLocationName,
-      toLocationId: txnData.toLocationId,
-      toLocationName: txnData.toLocationName,
-      items: txnData.items || [],
-      totalQuantity: qty,
-      reason: txnData.reason || '',
-      userId: session?.userId || 'user_1',
-      userName: currentOperator,
-      createdAt: new Date().toISOString(),
+      userId: session?.userId || 'user_admin',
+      userName: operatorName,
     };
 
-    setTransactions((prev) => {
-      const updated = [optimisticTxn, ...prev];
-      return updated.length >= 400 ? updated.slice(0, 300) : updated;
-    });
+    const targetItem = items.find((i) => i._id === data.itemId);
+    const qtyChange = Number(data.quantity) || 0;
 
-    if (txnData.items && txnData.items.length > 0) {
-      const targetItemId = txnData.items[0].itemId;
+    if (targetItem) {
+      let newTotal = targetItem.totalStock;
+      if (data.type === 'stock_in' || data.type === 'purchase') {
+        newTotal += qtyChange;
+      } else if (data.type === 'stock_out' || data.type === 'sale') {
+        newTotal = Math.max(0, newTotal - qtyChange);
+      } else if (data.type === 'adjust') {
+        newTotal = qtyChange;
+      }
+
       setItems((prev) =>
-        prev.map((it) => {
-          if (it._id !== targetItemId) return it;
-          let newTotal = Number(it.totalStock) || 0;
-          if (txnData.type === 'stock_in' || txnData.type === 'purchase') {
-            newTotal += qty;
-          } else if (txnData.type === 'stock_out' || txnData.type === 'sale') {
-            newTotal = Math.max(0, newTotal - qty);
-          } else if (txnData.type === 'adjust') {
-            newTotal = qty;
-          }
-          return { ...it, totalStock: newTotal };
-        })
+        prev.map((i) => (i._id === targetItem._id ? { ...i, totalStock: newTotal } : i))
       );
     }
 
-    setMetrics((prev) => ({
-      ...prev,
-      stockInToday: (txnData.type === 'stock_in' || txnData.type === 'purchase') ? prev.stockInToday + qty : prev.stockInToday,
-      stockOutToday: (txnData.type === 'stock_out' || txnData.type === 'sale') ? prev.stockOutToday + qty : prev.stockOutToday,
-    }));
+    const optimisticTxn: IStockTransaction = {
+      _id: 'temp_txn_' + Date.now(),
+      teamId: activeTeamId,
+      type: data.type,
+      referenceNo: 'TXN-' + Date.now().toString().slice(-6),
+      items: [
+        {
+          itemId: data.itemId,
+          sku: targetItem?.sku || '',
+          name: targetItem?.name || '',
+          quantity: qtyChange,
+          unitCost: targetItem?.costPrice,
+        },
+      ],
+      totalQuantity: qtyChange,
+      reason: data.reason || 'Manual Update',
+      userId: session?.userId || 'user_admin',
+      userName: operatorName,
+      createdAt: new Date().toISOString(),
+    };
 
-    const typeTitle = txnData.type.replace('_', ' ').toUpperCase();
-    showToast(`⚡ ${typeTitle} recorded instantly!`);
+    setTransactions((prev) => [optimisticTxn, ...prev.slice(0, 399)]);
+    showToast(`⚡ ${data.type === 'stock_in' ? 'Stock In' : 'Stock Out'} recorded!`);
 
-    // 2. Background database persistence
     try {
       const res = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...txnData,
-          teamId: activeTeamId,
-          userId: session?.userId || 'user_1',
-          userName: currentOperator,
-        }),
+        body: JSON.stringify(txnPayload),
       });
-      const data = await res.json();
-      if (data.success && data.transaction) {
-        setTransactions((prev) => prev.map((t) => (t._id === tempTxnId ? data.transaction : t)));
-        fetch('/api/sync?teamId=' + activeTeamId)
-          .then((r) => r.json())
-          .then((sync) => {
-            if (sync.success) {
-              if (sync.items) setItems(sync.items);
-              if (sync.metrics) setMetrics(sync.metrics);
-            }
-          })
-          .catch(() => {});
+      const resData = await res.json();
+      if (resData.success && resData.transaction) {
+        setTransactions((prev) =>
+          prev.map((t) => (t._id === optimisticTxn._id ? resData.transaction : t))
+        );
       }
     } catch (err) {
-      console.error('Background transaction error:', err);
+      console.error('Error recording transaction:', err);
     }
   };
 
+  const handleAddLocation = async (name: string) => {
+    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
+    const optimisticLoc: ILocation = {
+      _id: 'temp_loc_' + Date.now(),
+      teamId: activeTeamId,
+      name,
+      isDefault: false,
+      isArchived: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    setLocations((prev) => [...prev, optimisticLoc]);
+    showToast('Location added!');
+
+    try {
+      const res = await fetch('/api/locations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamId: activeTeamId, name }),
+      });
+      const data = await res.json();
+      if (data.success && data.location) {
+        setLocations((prev) => prev.map((l) => (l._id === optimisticLoc._id ? data.location : l)));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleAddMember = async (memberData: any) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
-    const tempMember: ITeamMember = {
-      _id: 'member_temp_' + Date.now(),
+    const optimisticMember: ITeamMember = {
+      _id: 'temp_mem_' + Date.now(),
       teamId: activeTeamId,
-      userId: 'user_temp_' + Date.now(),
+      userId: 'user_' + Date.now(),
       name: memberData.name,
       email: memberData.email,
-      role: memberData.role,
+      role: memberData.role || 'sales',
       status: 'active',
       joinedAt: new Date().toISOString(),
     };
-    setMembers((prev) => [tempMember, ...prev]);
-    showToast('⚡ Staff member added!');
+
+    setMembers((prev) => [...prev, optimisticMember]);
+    showToast('Member added!');
 
     try {
       const res = await fetch('/api/members', {
@@ -336,113 +339,82 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success && data.member) {
-        setMembers((prev) => prev.map((m) => (m._id === tempMember._id ? data.member : m)));
+        setMembers((prev) => prev.map((m) => (m._id === optimisticMember._id ? data.member : m)));
       }
-    } catch (e) {}
-  };
-
-  const handleAddLocation = async (name: string) => {
-    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
-    const tempLoc: ILocation = {
-      _id: 'loc_temp_' + Date.now(),
-      teamId: activeTeamId,
-      name,
-      isDefault: false,
-      isArchived: false,
-      createdAt: new Date().toISOString(),
-    };
-    setLocations((prev) => [...prev, tempLoc]);
-    showToast('⚡ Location added!');
-
-    try {
-      const res = await fetch('/api/locations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, teamId: activeTeamId }),
-      });
-      const data = await res.json();
-      if (data.success && data.location) {
-        setLocations((prev) => prev.map((l) => (l._id === tempLoc._id ? data.location : l)));
-      }
-    } catch (e) {}
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleExportCSV = () => {
-    const headers = ['SKU', 'Name', 'Category', 'Brand', 'Cost Price', 'Selling Price', 'Total Stock', 'Unit'];
+    const headers = ['Name', 'SKU', 'Category', 'Brand', 'Cost Price', 'Selling Price', 'Total Stock', 'Safety Stock'];
     const rows = items.map((i) => [
-      i.sku,
-      '"' + i.name + '"',
-      i.category,
-      i.brand,
-      i.costPrice,
-      i.sellingPrice,
-      i.totalStock,
-      i.unit,
+      `"${(i.name || '').replace(/"/g, '""')}"`,
+      `"${i.sku || ''}"`,
+      `"${i.category || ''}"`,
+      `"${i.brand || ''}"`,
+      i.costPrice || 0,
+      i.sellingPrice || 0,
+      i.totalStock || 0,
+      i.minStock || 5,
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', 'inventory_' + (currentTeam?.name.replace(/\s+/g, '_') || 'export') + '.csv');
+    link.href = url;
+    link.setAttribute('download', `simran_mobile_inventory_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    showToast('Stock sheet exported to CSV!');
   };
 
-  const openStockModal = (type: TransactionType, item: IItem | null = null) => {
+  const openStockModal = (type: TransactionType, item?: IItem | null) => {
     setStockModalConfig({
       isOpen: true,
       type,
-      preselectedItem: item,
+      preselectedItem: item || null,
     });
   };
 
   // 1. Initial auth loading state
   if (isAuthChecking) {
-    return <div className="min-h-screen bg-[#f3f4f8] flex items-center justify-center text-xs text-gray-400">Loading app...</div>;
+    return (
+      <div className="min-h-screen bg-[#f3f4f8] flex items-center justify-center text-xs text-gray-400">
+        Loading Simran Mobile...
+      </div>
+    );
   }
 
-  // 2. Access Denied / Expired Screen
-  if (accessDeniedReason) {
-    return <AccessExpiredScreen reason={accessDeniedReason} onLogout={handleLogout} />;
-  }
-
-  // 3. Not Logged In -> Show Login Screen FIRST
+  // 2. Not Logged In -> Show Login Screen
   if (!session) {
-    return (
-      <LoginScreen
-        onLoginSuccess={handleLoginSuccess}
-        onAccessDenied={(reason) => setAccessDeniedReason(reason)}
-      />
-    );
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // 4. Super Admin Mode -> Show Super Admin Dashboard (unless viewing specific shop)
-  if (session.isSuperAdmin && !viewingShopTeamId) {
-    return (
-      <SuperAdminDashboard
-        session={session}
-        onLogout={handleLogout}
-        onSwitchToShop={(teamId) => {
-          setViewingShopTeamId(teamId);
-        }}
-      />
-    );
-  }
-
-  // 5. Main Shop Inventory App View
+  // 3. Main Shop Inventory App View
   const todayStr = new Date().toISOString().split('T')[0];
   const liveStockInToday = transactions
-    .filter((t) => (t.type === 'stock_in' || t.type === 'purchase') && t.createdAt && new Date(t.createdAt).toISOString().startsWith(todayStr))
+    .filter(
+      (t) =>
+        (t.type === 'stock_in' || t.type === 'purchase') &&
+        t.createdAt &&
+        new Date(t.createdAt).toISOString().startsWith(todayStr)
+    )
     .reduce((acc, t) => acc + (Number(t.totalQuantity) || 0), 0);
 
   const liveStockOutToday = transactions
-    .filter((t) => (t.type === 'stock_out' || t.type === 'sale') && t.createdAt && new Date(t.createdAt).toISOString().startsWith(todayStr))
+    .filter(
+      (t) =>
+        (t.type === 'stock_out' || t.type === 'sale') &&
+        t.createdAt &&
+        new Date(t.createdAt).toISOString().startsWith(todayStr)
+    )
     .reduce((acc, t) => acc + (Number(t.totalQuantity) || 0), 0);
 
   return (
     <div className="min-h-screen bg-[#f3f4f8] text-gray-900 font-sans antialiased selection:bg-blue-500 selection:text-white pb-10">
-      {/* Mobile Frame Container */}
       <div className="max-w-md mx-auto bg-white min-h-screen shadow-2xl relative flex flex-col">
         {/* Floating Toast Notification */}
         {toast && (
@@ -452,14 +424,9 @@ export default function App() {
         )}
 
         {/* Header */}
-        <Header
-          currentTeam={currentTeam}
-          session={session}
-          onLogout={handleLogout}
-          onBackToAdmin={session.isSuperAdmin ? () => setViewingShopTeamId(null) : undefined}
-        />
+        <Header currentTeam={currentTeam} session={session} onLogout={handleLogout} />
 
-        {/* Home Metric Banner (only on Home tab) */}
+        {/* Home Metric Banner */}
         {activeTab === 'home' && (
           <MetricBanner
             dateStr={metrics.todayDateStr}
@@ -530,11 +497,12 @@ export default function App() {
               onOpenInvite={() => setIsInviteOpen(true)}
               onAddLocation={handleAddLocation}
               onExportData={handleExportCSV}
+              onOpenImportData={() => setIsCsvImportOpen(true)}
             />
           )}
         </main>
 
-        {/* Persistent Bottom Navigation */}
+        {/* Bottom Navigation */}
         <BottomNav activeTab={activeTab} onChangeTab={setActiveTab} />
 
         {/* Modals */}
@@ -600,6 +568,17 @@ export default function App() {
           transactions={transactions}
           initialMode={shortagesModalConfig.mode}
           onStockInItem={(item) => openStockModal('stock_in', item)}
+        />
+
+        <CsvImportModal
+          isOpen={isCsvImportOpen}
+          onClose={() => setIsCsvImportOpen(false)}
+          onSuccess={() => {
+            showToast('⚡ Stock sheet imported successfully!');
+            loadData();
+          }}
+          teamId={currentTeam?._id || session?.activeTeamId || 'team_1'}
+          operatorName={session?.userName || session?.name || 'Main Admin'}
         />
       </div>
     </div>

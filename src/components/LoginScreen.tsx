@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
-import { Lock, Mail, ArrowRight, Store, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Smartphone, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { UserSession } from '@/types';
 
 interface LoginScreenProps {
   onLoginSuccess: (session: UserSession, token: string) => void;
-  onAccessDenied: (reason: string) => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onAccessDenied }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -28,11 +27,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onAcce
 
       const data = await res.json();
 
-      if (res.status === 403 || data.accessDenied) {
-        onAccessDenied(data.reason || 'Your shop subscription has expired or access was revoked.');
-        return;
-      }
-
       if (!res.ok || !data.success) {
         setError(data.error || 'Invalid email or password');
         return;
@@ -52,13 +46,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onAcce
         {/* App Logo & Branding */}
         <div className="text-center space-y-2">
           <div className="w-14 h-14 bg-gradient-to-tr from-[#4965fa] to-indigo-600 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg shadow-blue-500/25">
-            <Store className="w-7 h-7" />
+            <Smartphone className="w-7 h-7" />
           </div>
           <h1 className="text-xl font-black text-gray-900 tracking-tight">
-            Inventory App
+            Simran Mobile
           </h1>
           <p className="text-xs text-gray-500">
-            Sign in to access your shop & stock management
+            Sign in to manage inventory & stock operations
           </p>
         </div>
 
