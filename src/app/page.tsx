@@ -213,7 +213,7 @@ export default function App() {
       await fetch(`/api/items/${item._id}?teamId=${activeTeamId}`, {
         method: 'DELETE',
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Delete item error:', err);
     }
   };
@@ -254,25 +254,34 @@ export default function App() {
     }
   };
 
-  const handleDeleteAllItems = async () => {
+  const handleDeleteAllItems = async (adminPassword?: string) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
 
-    // Optimistically clear all items and reset inventory metrics
-    setItems([]);
-    setMetrics((prev) => ({
-      ...prev,
-      totalItems: 0,
-      totalInventoryValue: 0,
-    }));
-    setSelectedItemForDetail(null);
-    showToast('🗑️ All items deleted successfully!');
-
     try {
-      await fetch(`/api/items?teamId=${activeTeamId}`, {
+      const res = await fetch(`/api/items?teamId=${activeTeamId}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminPassword || '',
+        },
       });
-    } catch (err) {
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Invalid Admin Password');
+      }
+
+      setItems([]);
+      setMetrics((prev) => ({
+        ...prev,
+        totalItems: 0,
+        totalInventoryValue: 0,
+      }));
+      setSelectedItemForDetail(null);
+      showToast('🗑️ All items deleted successfully!');
+    } catch (err: any) {
       console.error('Delete all items error:', err);
+      showToast(`❌ ${err.message}`);
+      throw err;
     }
   };
 
@@ -423,6 +432,40 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleUpdateMember = async (memberId: string, memberData: any) => {
+    setMembers((prev) =>
+      prev.map((m) => (m._id === memberId ? { ...m, ...memberData } : m))
+    );
+    showToast('Staff member updated!');
+
+    try {
+      const res = await fetch('/api/members', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, ...memberData }),
+      });
+      const data = await res.json();
+      if (data.success && data.member) {
+        setMembers((prev) => prev.map((m) => (m._id === memberId ? data.member : m)));
+      }
+    } catch (e) {
+      console.error('Update member error:', e);
+    }
+  };
+
+  const handleDeleteMember = async (memberId: string) => {
+    setMembers((prev) => prev.filter((m) => m._id !== memberId));
+    showToast('Staff member removed!');
+
+    try {
+      await fetch(`/api/members?memberId=${memberId}`, {
+        method: 'DELETE',
+      });
+    } catch (e) {
+      console.error('Delete member error:', e);
     }
   };
 
@@ -579,6 +622,8 @@ export default function App() {
               onExportData={handleExportCSV}
               onOpenImportData={() => setIsCsvImportOpen(true)}
               onDeleteAllItems={handleDeleteAllItems}
+              onUpdateMember={handleUpdateMember}
+              onDeleteMember={handleDeleteMember}
             />
           )}
         </main>

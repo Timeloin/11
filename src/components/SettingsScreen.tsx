@@ -15,8 +15,11 @@ import {
   Image as ImageIcon,
   RefreshCw,
   Trash2,
+  Edit3,
+  Lock,
 } from 'lucide-react';
 import { ITeam, ITeamMember, ILocation, UserSession } from '@/types';
+import { EditMemberModal } from '@/components/modals/EditMemberModal';
 
 interface SettingsScreenProps {
   team: ITeam | null;
@@ -29,7 +32,9 @@ interface SettingsScreenProps {
   onAddLocation: (name: string) => Promise<void>;
   onExportData: () => void;
   onOpenImportData?: () => void;
-  onDeleteAllItems?: () => Promise<void> | void;
+  onDeleteAllItems?: (adminPassword?: string) => Promise<void> | void;
+  onUpdateMember?: (memberId: string, data: any) => Promise<void>;
+  onDeleteMember?: (memberId: string) => Promise<void>;
 }
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
@@ -44,6 +49,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onExportData,
   onOpenImportData,
   onDeleteAllItems,
+  onUpdateMember,
+  onDeleteMember,
 }) => {
   const [newLocName, setNewLocName] = useState('');
   const [addingLoc, setAddingLoc] = useState(false);
@@ -56,10 +63,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   // Logout confirmation state
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // Member edit & delete state
+  const [editingMember, setEditingMember] = useState<ITeamMember | null>(null);
+  const [deletingMember, setDeletingMember] = useState<ITeamMember | null>(null);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
+
   // Delete all items 3-step modal state
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [deleteStep, setDeleteStep] = useState<1 | 2 | 3>(1);
   const [typedConfirmText, setTypedConfirmText] = useState('');
+  const [deleteAllAdminPassword, setDeleteAllAdminPassword] = useState('');
+  const [deleteAllError, setDeleteAllError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
   // App Icon state
@@ -73,6 +87,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
+
+  const isAdmin = session?.role === 'admin';
 
   useEffect(() => {
     if (session?.userName) {
@@ -157,6 +173,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     await onAddLocation(newLocName.trim());
     setNewLocName('');
     setAddingLoc(false);
+  };
+
+  const handleConfirmDeleteMember = async () => {
+    if (!deletingMember || !onDeleteMember) return;
+    setIsDeletingMember(true);
+    try {
+      await onDeleteMember(deletingMember._id);
+      setDeletingMember(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsDeletingMember(false);
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -246,7 +275,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
           <div className="flex justify-between items-center py-1 border-b border-gray-50">
             <span className="text-gray-400">Role:</span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700">
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAdmin ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
               {session?.role || 'Admin'}
             </span>
           </div>
@@ -439,31 +468,62 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <Users className="w-5 h-5 text-blue-600" />
             <h3 className="font-bold text-gray-900 text-sm">Staff & Members ({members.length})</h3>
           </div>
-          <button
-            onClick={onOpenInvite}
-            className="text-xs font-bold text-blue-600 hover:underline flex items-center space-x-1"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Member</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={onOpenInvite}
+              className="text-xs font-bold text-blue-600 hover:underline flex items-center space-x-1 bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Member</span>
+            </button>
+          )}
         </div>
 
-        <div className="space-y-2">
-          {members.map((m) => (
-            <div
-              key={m._id}
-              className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl text-xs"
-            >
-              <div>
-                <div className="font-bold text-gray-900">{m.name}</div>
-                <div className="text-gray-400">{m.email}</div>
+        {members.length === 0 ? (
+          <div className="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-xl">
+            No staff members added yet. {isAdmin && 'Click "+ Add Member" to invite staff.'}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {members.map((m) => (
+              <div
+                key={m._id}
+                className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl text-xs"
+              >
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="font-bold text-gray-900 truncate">{m.name}</span>
+                    <span className="px-1.5 py-0.2 rounded uppercase font-bold text-[9px] bg-blue-100 text-blue-800 shrink-0">
+                      {m.role}
+                    </span>
+                  </div>
+                  <div className="text-gray-400 text-[11px] truncate">{m.email}</div>
+                </div>
+
+                {isAdmin && (
+                  <div className="flex items-center space-x-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditingMember(m)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                      title="Edit Member"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingMember(m)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Delete Member"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
-              <span className="px-2 py-0.5 rounded uppercase font-bold text-[10px] bg-blue-100 text-blue-800">
-                {m.role}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Locations Section */}
@@ -549,21 +609,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       </div>
 
-      {/* Danger Zone: Wipe All Inventory */}
-      {onDeleteAllItems && (
+      {/* Danger Zone: Wipe All Inventory (Admin Only) */}
+      {onDeleteAllItems && isAdmin && (
         <div className="bg-red-50/70 rounded-2xl border border-red-200/80 shadow-xs p-4 space-y-3">
           <div className="flex items-center space-x-2 text-red-700">
             <Trash2 className="w-5 h-5 text-red-600" />
             <h3 className="font-bold text-sm">Danger Zone</h3>
           </div>
           <p className="text-xs text-red-600/90 leading-relaxed">
-            Delete all stock items from your catalog at once. Protected with a 3-step security verification so there are zero accidental deletions.
+            Delete all stock items from your catalog at once. Protected with a 3-step security verification and Admin Password check.
           </p>
           <button
             type="button"
             onClick={() => {
               setDeleteStep(1);
               setTypedConfirmText('');
+              setDeleteAllAdminPassword('');
+              setDeleteAllError('');
               setShowDeleteAllModal(true);
             }}
             className="w-full py-2.5 px-3 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center space-x-1.5"
@@ -596,6 +658,56 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <LogOut className="w-4 h-4" />
             <span>Sign Out</span>
           </button>
+        </div>
+      )}
+
+      {/* Edit Member Modal */}
+      {editingMember && onUpdateMember && (
+        <EditMemberModal
+          isOpen={!!editingMember}
+          member={editingMember as any}
+          onClose={() => setEditingMember(null)}
+          onUpdate={async (memberId, data) => {
+            await onUpdateMember(memberId, data);
+            setEditingMember(null);
+          }}
+        />
+      )}
+
+      {/* Delete Member Confirmation Modal */}
+      {deletingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-gray-100 animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-gray-900">Remove Staff Member?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Are you sure you want to remove <strong className="text-gray-800">{deletingMember.name}</strong> ({deletingMember.email}) from staff members? They will no longer be able to log in.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingMember(null)}
+                disabled={isDeletingMember}
+                className="py-2.5 px-4 rounded-xl border border-gray-200 text-gray-700 font-semibold text-xs hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteMember}
+                disabled={isDeletingMember}
+                className="py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md shadow-red-200 transition-colors"
+              >
+                {isDeletingMember ? 'Removing...' : 'Yes, Remove'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -719,26 +831,43 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center mx-auto shadow-md">
                   <Trash2 className="w-6 h-6" />
                 </div>
-                <div className="text-center space-y-1.5">
+                <div className="text-center space-y-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-800 px-2 py-0.5 rounded-md">
                     Confirmation 3 of 3 (Final)
                   </span>
                   <h3 className="text-base font-extrabold text-gray-900">
-                    Type DELETE ALL to Confirm
+                    Type DELETE ALL & Enter Password
                   </h3>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    Type <strong className="text-red-600 font-mono">DELETE ALL</strong> in uppercase to enable deletion.
+                    Type <strong className="text-red-600 font-mono">DELETE ALL</strong> and enter your Admin Password.
                   </p>
                 </div>
 
-                <div className="pt-1">
-                  <input
-                    type="text"
-                    value={typedConfirmText}
-                    onChange={(e) => setTypedConfirmText(e.target.value)}
-                    placeholder="Type DELETE ALL"
-                    className="w-full text-center tracking-widest font-mono font-bold text-sm px-3 py-2.5 bg-gray-50 border-2 border-red-200 rounded-xl text-red-600 focus:outline-none focus:border-red-500 focus:bg-white transition-all uppercase"
-                  />
+                <div className="space-y-2 pt-1">
+                  <div>
+                    <input
+                      type="text"
+                      value={typedConfirmText}
+                      onChange={(e) => setTypedConfirmText(e.target.value)}
+                      placeholder="Type DELETE ALL"
+                      className="w-full text-center tracking-widest font-mono font-bold text-xs px-3 py-2 bg-gray-50 border-2 border-red-200 rounded-xl text-red-600 focus:outline-none focus:border-red-500 focus:bg-white transition-all uppercase"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      value={deleteAllAdminPassword}
+                      onChange={(e) => {
+                        setDeleteAllAdminPassword(e.target.value);
+                        setDeleteAllError('');
+                      }}
+                      placeholder="Enter Admin Password"
+                      className="w-full text-center font-mono text-xs px-3 py-2 bg-gray-50 border border-red-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+                  {deleteAllError && (
+                    <p className="text-[10px] text-red-600 font-semibold text-center">{deleteAllError}</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5 pt-2">
@@ -752,15 +881,25 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </button>
                   <button
                     type="button"
-                    disabled={typedConfirmText.trim() !== 'DELETE ALL' || isDeleting}
+                    disabled={
+                      typedConfirmText.trim() !== 'DELETE ALL' ||
+                      !deleteAllAdminPassword.trim() ||
+                      isDeleting
+                    }
                     onClick={async () => {
                       if (typedConfirmText.trim() !== 'DELETE ALL') return;
+                      if (!deleteAllAdminPassword.trim()) {
+                        setDeleteAllError('Admin password required');
+                        return;
+                      }
                       setIsDeleting(true);
                       try {
                         if (onDeleteAllItems) {
-                          await onDeleteAllItems();
+                          await onDeleteAllItems(deleteAllAdminPassword.trim());
                         }
                         setShowDeleteAllModal(false);
+                      } catch (err: any) {
+                        setDeleteAllError(err.message || 'Failed to delete items');
                       } finally {
                         setIsDeleting(false);
                       }
@@ -779,3 +918,4 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     </div>
   );
 };
+

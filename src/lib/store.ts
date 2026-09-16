@@ -481,6 +481,92 @@ export class InventoryStore {
     return member;
   }
 
+  static async updateMember(
+    memberId: string,
+    data: {
+      name?: string;
+      email?: string;
+      password?: string;
+      role?: Role;
+      customPermissions?: CustomPermissions;
+    }
+  ): Promise<ITeamMember | null> {
+    const cleanEmail = data.email ? data.email.trim().toLowerCase() : undefined;
+
+    if (process.env.MONGODB_URI) {
+      try {
+        await connectDB();
+        const updateFields: any = {};
+        if (data.name) updateFields.name = data.name.trim();
+        if (cleanEmail) updateFields.email = cleanEmail;
+        if (data.password) updateFields.password = data.password.trim();
+        if (data.role) updateFields.role = data.role;
+        if (data.customPermissions) updateFields.customPermissions = data.customPermissions;
+
+        const member = await TeamMember.findByIdAndUpdate(memberId, updateFields, { new: true });
+        if (member) {
+          const userUpdate: any = {};
+          if (data.name) userUpdate.name = data.name.trim();
+          if (cleanEmail) userUpdate.email = cleanEmail;
+          if (data.role) userUpdate.role = data.role;
+          if (data.password) {
+            userUpdate.plainPassword = data.password.trim();
+            userUpdate.passwordHash = await hashPassword(data.password.trim());
+          }
+          if (member.userId) {
+            await User.findByIdAndUpdate(member.userId, userUpdate);
+          } else if (member.email) {
+            await User.findOneAndUpdate({ email: member.email }, userUpdate);
+          }
+          return JSON.parse(JSON.stringify(member));
+        }
+      } catch (err) {
+        console.error('MongoDB updateMember error:', err);
+      }
+    }
+
+    const idx = demoMembers.findIndex((m) => m._id === memberId);
+    if (idx !== -1) {
+      demoMembers[idx] = {
+        ...demoMembers[idx],
+        name: data.name || demoMembers[idx].name,
+        email: cleanEmail || demoMembers[idx].email,
+        password: data.password || demoMembers[idx].password,
+        role: data.role || demoMembers[idx].role,
+        customPermissions: data.customPermissions || demoMembers[idx].customPermissions,
+      };
+      return demoMembers[idx];
+    }
+    return null;
+  }
+
+  static async deleteMember(memberId: string): Promise<boolean> {
+    if (process.env.MONGODB_URI) {
+      try {
+        await connectDB();
+        const member = await TeamMember.findByIdAndDelete(memberId);
+        if (member) {
+          if (member.userId) {
+            await User.findByIdAndDelete(member.userId);
+          }
+          if (member.email) {
+            await User.findOneAndDelete({ email: member.email });
+          }
+          return true;
+        }
+      } catch (err) {
+        console.error('MongoDB deleteMember error:', err);
+      }
+    }
+
+    const idx = demoMembers.findIndex((m) => m._id === memberId);
+    if (idx !== -1) {
+      demoMembers.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+
   // Teams CRUD
   static async listTeams(): Promise<ITeam[]> {
     if (process.env.MONGODB_URI) {

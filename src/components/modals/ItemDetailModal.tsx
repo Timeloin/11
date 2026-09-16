@@ -318,14 +318,17 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                 <p className="text-[11px] text-red-600 leading-relaxed">
                   This will remove <strong>{item.name}</strong> from your active stock list.
                 </p>
+
                 <div className="flex items-center space-x-2 pt-1">
                   <button
+                    type="button"
                     onClick={() => setShowDeleteConfirm(false)}
                     className="flex-1 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 active:scale-98 transition-all"
                   >
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={handleConfirmDelete}
                     className="flex-1 py-1.5 bg-red-600 text-white rounded-xl text-xs font-bold hover:bg-red-700 active:scale-98 transition-all shadow-xs flex items-center justify-center space-x-1"
                   >

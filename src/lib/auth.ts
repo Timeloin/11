@@ -26,3 +26,10 @@ export function verifyToken(token: string): UserSession | null {
     return null;
   }
 }
+
+export function verifyAdminPassword(password?: string): boolean {
+  if (!password) return false;
+  const envPass = (process.env.SUPER_ADMIN_PASSWORD || SUPER_ADMIN_PASSWORD || '').trim();
+  if (!envPass) return true; // If no password configured in environment, allow
+  return password.trim() === envPass;
+}

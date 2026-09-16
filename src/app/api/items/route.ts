@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { InventoryStore } from '@/lib/store';
+import { verifyAdminPassword } from '@/lib/auth';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -34,6 +35,15 @@ export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const teamId = searchParams.get('teamId') || 'team_1';
+    const adminPassword = req.headers.get('x-admin-password') || searchParams.get('adminPassword') || '';
+
+    if (!verifyAdminPassword(adminPassword)) {
+      return NextResponse.json(
+        { error: 'Incorrect Admin Password. Only Admin can delete items.' },
+        { status: 403 }
+      );
+    }
+
     const ok = await InventoryStore.deleteAllItems(teamId);
     return NextResponse.json({ success: ok });
   } catch (err: any) {

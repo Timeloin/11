@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { InventoryStore } from '@/lib/store';
+import { verifyAdminPassword } from '@/lib/auth';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
