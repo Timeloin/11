@@ -1,7 +1,12 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import { connectDB } from '@/lib/db';
 import Team from '@/models/Team';
+import AppConfig from '@/models/AppConfig';
 import { InventoryStore } from '@/lib/store';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // Default SVG App Icon for Simran Mobile
 const DEFAULT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
@@ -40,21 +45,32 @@ export async function GET(req: Request) {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        let team;
-        if (teamId && teamId !== 'all') {
-          team = await Team.findById(teamId).lean();
+        
+        // 1. Check AppConfig first
+        const config = await AppConfig.findOne({ key: 'main_app_config' }).lean() as any;
+        if (config?.appIcon) {
+          iconDataUrl = config.appIcon;
         }
-        if (!team) {
-          team = await Team.findOne({}).sort({ updatedAt: -1 }).lean();
-        }
-        if (team && (team as any).appIcon) {
-          iconDataUrl = (team as any).appIcon;
+
+        // 2. If not found in config, check Team
+        if (!iconDataUrl) {
+          let team: any;
+          if (teamId && mongoose.isValidObjectId(teamId)) {
+            team = await Team.findById(teamId).lean();
+          }
+          if (!team) {
+            team = await Team.findOne({ appIcon: { $exists: true, $ne: '' } }).sort({ updatedAt: -1 }).lean();
+          }
+          if (team?.appIcon) {
+            iconDataUrl = team.appIcon;
+          }
         }
       } catch (e) {
         console.error('Error loading appIcon from DB:', e);
       }
     }
 
+    // 3. Check memory store fallback
     if (!iconDataUrl) {
       const memoryTeam = await InventoryStore.getTeam(teamId || 'team_1');
       if (memoryTeam?.appIcon) {
@@ -62,7 +78,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // If custom image data URL exists
+    // If custom base64 image data URL exists
     if (iconDataUrl && iconDataUrl.startsWith('data:')) {
       const matches = iconDataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       if (matches && matches.length === 3) {
@@ -73,7 +89,9 @@ export async function GET(req: Request) {
           headers: {
             'Content-Type': mimeType,
             'Content-Length': buffer.length.toString(),
-            'Cache-Control': 'public, max-age=60, s-maxage=300',
+            'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
           },
         });
       }
@@ -84,7 +102,9 @@ export async function GET(req: Request) {
       status: 200,
       headers: {
         'Content-Type': 'image/svg+xml',
-        'Cache-Control': 'public, max-age=60, s-maxage=300',
+        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     });
   } catch (err: any) {
@@ -107,19 +127,19 @@ export async function POST(req: Request) {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        let targetTeam;
-        if (teamId) {
-          targetTeam = await Team.findByIdAndUpdate(teamId, { appIcon }, { new: true });
-        }
-        if (!targetTeam) {
-          targetTeam = await Team.findOneAndUpdate({}, { appIcon }, { new: true, sort: { updatedAt: -1 } });
-        }
-        if (!targetTeam) {
-          await Team.create({
-            name: 'Simran Mobile',
-            inviteCode: 'SIMRAN88',
-            appIcon,
-          });
+        
+        // 1. Save to dedicated AppConfig
+        await AppConfig.findOneAndUpdate(
+          { key: 'main_app_config' },
+          { appIcon, appName: 'Simran Mobile' },
+          { upsert: true, new: true }
+        );
+
+        // 2. Also save to Team if valid ObjectId or first team
+        if (teamId && mongoose.isValidObjectId(teamId)) {
+          await Team.findByIdAndUpdate(teamId, { appIcon }, { new: true });
+        } else {
+          await Team.findOneAndUpdate({}, { appIcon }, { new: true, sort: { updatedAt: -1 } });
         }
       } catch (e: any) {
         console.error('Error saving appIcon to DB:', e);

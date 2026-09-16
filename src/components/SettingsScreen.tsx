@@ -51,7 +51,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // App Icon state
-  const [appIconPreview, setAppIconPreview] = useState<string>(team?.appIcon || '/api/app-icon');
+  const [appIconPreview, setAppIconPreview] = useState<string>('/api/app-icon');
   const [isUploadingIcon, setIsUploadingIcon] = useState(false);
   const [iconSavedSuccess, setIconSavedSuccess] = useState(false);
   const [iconError, setIconError] = useState<string | null>(null);
@@ -69,13 +69,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   }, [session?.userName]);
 
   useEffect(() => {
-    if (team?.appIcon) {
-      setAppIconPreview(team.appIcon);
+    try {
+      const localCached = localStorage.getItem('simran_app_icon');
+      if (localCached) {
+        setAppIconPreview(localCached);
+      } else if (team?.appIcon) {
+        setAppIconPreview(team.appIcon);
+      } else {
+        setAppIconPreview(`/api/app-icon?t=${Date.now()}`);
+      }
+    } catch (e) {
+      setAppIconPreview(`/api/app-icon?t=${Date.now()}`);
     }
   }, [team?.appIcon]);
 
   useEffect(() => {
-    // Check if app is running in standalone mode (already installed)
     if (
       typeof window !== 'undefined' &&
       (window.matchMedia('(display-mode: standalone)').matches ||
@@ -84,7 +92,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       setIsInstalled(true);
     }
 
-    // Capture beforeinstallprompt event for Android Chrome
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -140,7 +147,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setAddingLoc(false);
   };
 
-  // Handle Logo file select & upload
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -172,8 +178,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           const sy = (img.height - minDim) / 2;
           ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 512, 512);
 
-          const base64Data = canvas.toDataURL('image/png', 0.9);
+          const base64Data = canvas.toDataURL('image/png', 0.95);
           setAppIconPreview(base64Data);
+
+          try {
+            localStorage.setItem('simran_app_icon', base64Data);
+          } catch (e) {}
+
+          // Update live DOM tags in head
+          const iconLinks = document.querySelectorAll("link[rel*='icon'], link[rel*='apple-touch-icon']");
+          iconLinks.forEach((link: any) => {
+            link.href = `/api/app-icon?t=${Date.now()}`;
+          });
 
           const res = await fetch('/api/app-icon', {
             method: 'POST',
