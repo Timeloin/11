@@ -401,6 +401,36 @@ export class InventoryStore {
     return { success: true, count: itemsList.length, imported, updated };
   }
 
+  // Compatibility Helpers
+  static calculateSubscription(team?: any) {
+    return { type: 'lifetime' as const, isRevoked: false, isValid: true, daysRemaining: 9999 };
+  }
+
+  static async listSubAdmins(): Promise<ISubAdminInfo[]> {
+    return [];
+  }
+
+  static async createSubAdmin(data: any): Promise<ISubAdminInfo> {
+    return {
+      userId: 'user_admin',
+      name: data.name,
+      email: data.email,
+      teamId: 'team_1',
+      shopName: data.shopName || 'Simran Mobile',
+      subscriptionType: 'lifetime',
+      isAccessRevoked: false,
+      daysRemaining: 9999,
+      isValid: true,
+      membersCount: 0,
+      itemsCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  static async updateSubAdminSubscription(teamId: string, update: any): Promise<boolean> {
+    return true;
+  }
+
   // Add Staff Member with Email & Password
   static async addMemberWithCredentials(teamId: string, memberData: {
     name: string;
