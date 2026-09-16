@@ -8,7 +8,7 @@ const UserSchema = new Schema({
   phone: { type: String },
   role: { type: String, default: 'admin' },
   isSuperAdmin: { type: Boolean, default: false },
-  defaultTeamId: { type: Schema.Types.ObjectId, ref: 'Team' },
+  defaultTeamId: { type: Schema.Types.Mixed },
 }, { timestamps: true });
 
 export default mongoose.models.User || mongoose.model('User', UserSchema);

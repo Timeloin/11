@@ -1,5 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Users, MapPin, Download, LogOut, Database, Plus, Check, User, AlertTriangle } from 'lucide-react';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import {
+  Users,
+  MapPin,
+  Download,
+  LogOut,
+  Database,
+  Plus,
+  Check,
+  User,
+  AlertTriangle,
+  Smartphone,
+  Upload,
+  Image as ImageIcon,
+  RefreshCw,
+} from 'lucide-react';
 import { ITeam, ITeamMember, ILocation, UserSession } from '@/types';
 
 interface SettingsScreenProps {
@@ -36,11 +50,72 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   // Logout confirmation state
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // App Icon state
+  const [appIconPreview, setAppIconPreview] = useState<string>(team?.appIcon || '/api/app-icon');
+  const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+  const [iconSavedSuccess, setIconSavedSuccess] = useState(false);
+  const [iconError, setIconError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // PWA Install Prompt state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [installSuccess, setInstallSuccess] = useState(false);
+
   useEffect(() => {
     if (session?.userName) {
       setProfileName(session.userName);
     }
   }, [session?.userName]);
+
+  useEffect(() => {
+    if (team?.appIcon) {
+      setAppIconPreview(team.appIcon);
+    }
+  }, [team?.appIcon]);
+
+  useEffect(() => {
+    // Check if app is running in standalone mode (already installed)
+    if (
+      typeof window !== 'undefined' &&
+      (window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true)
+    ) {
+      setIsInstalled(true);
+    }
+
+    // Capture beforeinstallprompt event for Android Chrome
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      setInstallSuccess(true);
+      setTimeout(() => setInstallSuccess(false), 4000);
+    };
+
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstalled(true);
+    }
+    setDeferredPrompt(null);
+  };
 
   const handleSaveName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +140,68 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setAddingLoc(false);
   };
 
+  // Handle Logo file select & upload
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 4 * 1024 * 1024) {
+      setIconError('Image size should be less than 4MB');
+      return;
+    }
+
+    setIconError(null);
+    setIsUploadingIcon(true);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const img = new Image();
+        img.onload = async () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 512;
+          canvas.height = 512;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          ctx.fillStyle = '#4965fa';
+          ctx.fillRect(0, 0, 512, 512);
+
+          const minDim = Math.min(img.width, img.height);
+          const sx = (img.width - minDim) / 2;
+          const sy = (img.height - minDim) / 2;
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 512, 512);
+
+          const base64Data = canvas.toDataURL('image/png', 0.9);
+          setAppIconPreview(base64Data);
+
+          const res = await fetch('/api/app-icon', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              teamId: team?._id || 'team_1',
+              appIcon: base64Data,
+            }),
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            setIconSavedSuccess(true);
+            setTimeout(() => setIconSavedSuccess(false), 3000);
+          } else {
+            setIconError(data.error || 'Failed to save icon');
+          }
+          setIsUploadingIcon(false);
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setIconError(err.message || 'Error processing image');
+      setIsUploadingIcon(false);
+    }
+  };
+
   return (
     <div className="px-4 py-4 space-y-4 pb-28 max-w-md mx-auto">
       {/* Profile & Name Card */}
@@ -77,7 +214,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <div className="text-xs text-gray-500 space-y-1">
           <div className="flex justify-between items-center py-1 border-b border-gray-50">
             <span className="text-gray-400">Account Email:</span>
-            <span className="font-semibold text-gray-800">{session?.email || 'harpreetsinghhappy7080@gmail.com'}</span>
+            <span className="font-semibold text-gray-800">{session?.email || 'admin@shop.com'}</span>
           </div>
           <div className="flex justify-between items-center py-1 border-b border-gray-50">
             <span className="text-gray-400">Role:</span>
@@ -122,12 +259,147 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </form>
       </div>
 
+      {/* App Logo & Custom Branding (Saved to DB) */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <ImageIcon className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-sm font-bold text-gray-900">App Logo & Icon</h2>
+          </div>
+          <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full">
+            Database Saved
+          </span>
+        </div>
+
+        <p className="text-xs text-gray-500 leading-relaxed">
+          Upload your shop logo. This icon is saved in the database and is automatically used when adding <strong>Simran Mobile</strong> to your iPhone or Android Home Screen.
+        </p>
+
+        <div className="flex items-center space-x-4 pt-1">
+          <div className="relative w-16 h-16 rounded-2xl overflow-hidden shadow-md border-2 border-indigo-100 bg-gray-50 flex items-center justify-center shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={appIconPreview}
+              alt="Simran Mobile Logo"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/api/app-icon';
+              }}
+            />
+            {isUploadingIcon && (
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                <RefreshCw className="w-5 h-5 text-white animate-spin" />
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 space-y-1.5">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingIcon}
+              className="w-full py-2 px-3 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-colors flex items-center justify-center space-x-1.5"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>{isUploadingIcon ? 'Uploading...' : 'Upload New Logo'}</span>
+            </button>
+            <div className="text-[10px] text-gray-400">
+              Supports PNG, JPG, WEBP. Auto-cropped to 512×512 HD.
+            </div>
+          </div>
+        </div>
+
+        {iconSavedSuccess && (
+          <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-emerald-800 text-xs font-semibold">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>App icon updated and saved to database!</span>
+          </div>
+        )}
+
+        {iconError && (
+          <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-2 text-red-700 text-xs font-semibold">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{iconError}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Install Mobile Web App (PWA Standalone Mode) */}
+      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 text-white space-y-3 shadow-md">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Smartphone className="w-5 h-5 text-yellow-300" />
+            <h3 className="font-bold text-sm tracking-wide">Install Simran Mobile App</h3>
+          </div>
+          <span className="text-[10px] bg-white/20 text-white font-bold px-2 py-0.5 rounded-full">
+            PWA Standalone
+          </span>
+        </div>
+
+        <p className="text-xs text-blue-100 leading-relaxed">
+          Install the web app on your phone to run in full-screen standalone mode without any browser URL bars—just like a native mobile app!
+        </p>
+
+        {deferredPrompt && !isInstalled && (
+          <button
+            onClick={handleInstallClick}
+            className="w-full py-2.5 px-4 bg-white text-blue-700 hover:bg-blue-50 font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center space-x-2"
+          >
+            <Download className="w-4 h-4 text-blue-600" />
+            <span>📲 Tap Here to Install App on Android</span>
+          </button>
+        )}
+
+        {isInstalled && (
+          <div className="p-2 bg-emerald-500/20 border border-emerald-300/40 rounded-xl flex items-center space-x-2 text-xs font-semibold text-emerald-200">
+            <Check className="w-4 h-4 text-emerald-300 shrink-0" />
+            <span>Simran Mobile is installed and active in standalone app mode!</span>
+          </div>
+        )}
+
+        {/* Installation Guides */}
+        <div className="space-y-2 pt-1">
+          {/* Android Chrome Instructions */}
+          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 text-xs space-y-1.5 border border-white/10">
+            <div className="font-bold text-yellow-200 flex items-center space-x-1">
+              <span>🤖 Android (Google Chrome)</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-1 text-[11px] text-blue-50 leading-relaxed">
+              <li>Open this website in <strong>Google Chrome</strong>.</li>
+              <li>Tap the <strong>3 dots (⋮)</strong> menu in the top-right corner.</li>
+              <li>Tap <strong>&ldquo;Install app&rdquo;</strong> or <strong>&ldquo;Add to Home screen&rdquo;</strong>.</li>
+              <li>The app opens in standalone mode without browser bars!</li>
+            </ol>
+          </div>
+
+          {/* iPhone Safari Instructions */}
+          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 text-xs space-y-1.5 border border-white/10">
+            <div className="font-bold text-yellow-200 flex items-center space-x-1">
+              <span>🍎 iPhone / iPad (Safari)</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-1 text-[11px] text-blue-50 leading-relaxed">
+              <li>Open this website in <strong>Safari</strong>.</li>
+              <li>Tap the <strong>Share</strong> button <span className="inline-block px-1 bg-white/20 rounded text-[10px]">📤</span> at the bottom.</li>
+              <li>Scroll down and tap <strong>&ldquo;Add to Home Screen&rdquo;</strong> <span className="inline-block px-1 bg-white/20 rounded text-[10px]">➕</span>.</li>
+              <li>Your custom shop logo and <strong>Simran Mobile</strong> icon will appear on your home screen!</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
       {/* Shop Info Card */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-2">
         <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Shop Details</h2>
-        <div className="text-lg font-bold text-gray-900">{team?.name || 'simran mobile shop'}</div>
+        <div className="text-lg font-bold text-gray-900">{team?.name || 'Simran Mobile'}</div>
         <div className="flex items-center justify-between pt-2 text-xs text-gray-600">
-          <span>Store: <strong className="font-semibold text-gray-800">{team?.name || 'simran mobile shop'}</strong></span>
+          <span>Store: <strong className="font-semibold text-gray-800">{team?.name || 'Simran Mobile'}</strong></span>
           <span>Currency: <strong className="font-bold">{team?.currency || '₹'}</strong></span>
         </div>
       </div>
@@ -238,10 +510,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       <div className="bg-gradient-to-r from-gray-900 to-slate-800 rounded-2xl p-4 text-white space-y-2">
         <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400">
           <Database className="w-4 h-4" />
-          <span>MongoDB & Vercel Ready</span>
+          <span>MongoDB Atlas Connected</span>
         </div>
         <p className="text-[11px] text-gray-300 leading-relaxed">
-          Running with reactive local-first caching. All changes and transaction operator names are saved to MongoDB Atlas.
+          Simran Mobile is configured for production. Custom app icons, member permissions, safety stocks, and operator-stamped transactions are synchronized with MongoDB Atlas.
         </p>
       </div>
 

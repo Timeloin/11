@@ -4,8 +4,8 @@ import { UserSession } from '@/types';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'inventory-super-secure-jwt-key-2026';
 
-export const SUPER_ADMIN_EMAIL = 'harpreetsinghhappy7080@gmail.com';
-export const SUPER_ADMIN_PASSWORD = '@Harpreet7518';
+export const SUPER_ADMIN_EMAIL = (process.env.SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
+export const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || '';
 
 export async function hashPassword(password: string): Promise<string> {
   return await bcrypt.hash(password, 10);

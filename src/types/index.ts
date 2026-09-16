@@ -138,6 +138,7 @@ export interface ITeam {
   subscriptionDays?: number;
   subscriptionExpiresAt?: string;
   isAccessRevoked: boolean;
+  appIcon?: string;
   createdAt: string;
 }
 

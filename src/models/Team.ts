@@ -12,6 +12,7 @@ const TeamSchema = new Schema({
   subscriptionDays: { type: Number, default: 10 },
   subscriptionExpiresAt: { type: Date },
   isAccessRevoked: { type: Boolean, default: false },
+  appIcon: { type: String },
 }, { timestamps: true });
 
 export default mongoose.models.Team || mongoose.model('Team', TeamSchema);

@@ -27,27 +27,7 @@ let demoTeams: ITeam[] = [
   }
 ];
 
-let demoUsers: any[] = [
-  {
-    _id: 'user_superadmin',
-    name: 'Harpreet Singh (Super Admin)',
-    email: SUPER_ADMIN_EMAIL.toLowerCase(),
-    passwordHash: 'SUPER_ADMIN_PASSWORD_HASH',
-    plainPassword: SUPER_ADMIN_PASSWORD,
-    role: 'superadmin',
-    isSuperAdmin: true,
-  },
-  {
-    _id: 'user_subadmin_1',
-    name: 'Simran Sub-Admin',
-    email: 'subadmin@simranmobile.com',
-    passwordHash: 'SUBADMIN_HASH',
-    plainPassword: 'password123',
-    role: 'admin',
-    isSuperAdmin: false,
-    defaultTeamId: 'team_1',
-  }
-];
+let demoUsers: any[] = [];
 
 let demoLocations: ILocation[] = [
   {
@@ -120,14 +100,17 @@ export class InventoryStore {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = pass.trim();
 
+    const envAdminEmail = (process.env.SUPER_ADMIN_EMAIL || SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
+    const envAdminPass = process.env.SUPER_ADMIN_PASSWORD || SUPER_ADMIN_PASSWORD || '';
+
     // 1. Super Admin direct login
-    if (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase() && cleanPass === SUPER_ADMIN_PASSWORD) {
+    if (envAdminEmail && envAdminPass && cleanEmail === envAdminEmail && cleanPass === envAdminPass) {
       return {
         success: true,
         session: {
           userId: 'user_superadmin',
-          name: 'Harpreet Singh (Super Admin)',
-          email: SUPER_ADMIN_EMAIL,
+          name: 'Super Admin',
+          email: envAdminEmail,
           role: 'superadmin',
           isSuperAdmin: true,
           subscription: {

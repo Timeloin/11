@@ -29,7 +29,7 @@ export const AccessExpiredScreen: React.FC<AccessExpiredScreenProps> = ({ reason
             <span>Need to Renew Access?</span>
           </div>
           <p className="text-[11px] text-amber-700">
-            Please contact Main Admin <strong>Harpreet Singh</strong> to extend or restore your shop subscription.
+            Please contact your <strong>Super Admin</strong> to extend or restore your shop subscription.
           </p>
         </div>
 
