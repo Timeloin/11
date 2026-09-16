@@ -258,23 +258,23 @@ export class InventoryStore {
         }
 
         for (const raw of itemsList) {
-          const name = String(raw.name || raw['Item Name'] || raw['Product Name'] || '').trim();
+          const name = String(raw.Name || raw.name || raw['Item Name'] || raw['Product Name'] || '').trim();
           if (!name) continue;
 
           const sku = String(
-            raw.sku ||
-              raw.SKU ||
+            raw.SKU ||
+              raw.sku ||
               raw['Item Code'] ||
               `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`
           ).trim();
-          const category = String(raw.category || raw.Category || 'General').trim().toLowerCase();
-          const brand = String(raw.brand || raw.Brand || 'Generic').trim().toLowerCase();
-          const unit = String(raw.unit || raw.Unit || 'pcs').trim();
-          const costPrice = Number(raw.costPrice || raw['Cost Price'] || raw.Cost || 0) || 0;
-          const sellingPrice = Number(raw.sellingPrice || raw['Selling Price'] || raw.Price || 0) || 0;
+          const category = String(raw.Category || raw.category || 'mobile phone').trim().toLowerCase();
+          const brand = String(raw.Brand || raw.brand || 'generic').trim().toLowerCase();
+          const unit = String(raw.Unit || raw.unit || 'pcs').trim();
+          const costPrice = Number(raw['Cost Price'] || raw.costPrice || raw['Unit Cost'] || raw.Cost || 0) || 0;
+          const sellingPrice = Number(raw['Selling Price'] || raw.sellingPrice || raw.Price || 0) || 0;
           const totalStock =
-            Number(raw.totalStock || raw['Total Stock'] || raw.Stock || raw.Quantity || 0) || 0;
-          const minStock = Number(raw.minStock || raw['Safety Stock'] || raw['Min Stock'] || 5) || 5;
+            Number(raw['Total Stock'] || raw.totalStock || raw.Quantity || raw.Stock || raw['Qty(Default Location)'] || 0) || 0;
+          const minStock = Number(raw['Safety Stock'] || raw.minStock || raw['Min Stock'] || 3) || 3;
           const barcodes = raw.barcodes || (raw.Barcode ? [String(raw.Barcode).trim()] : []);
 
           let existingItem = await Item.findOne({ teamId: targetTeamId, sku });
@@ -357,13 +357,22 @@ export class InventoryStore {
 
     // In-memory fallback
     for (const raw of itemsList) {
-      const name = String(raw.name || raw['Item Name'] || raw['Product Name'] || '').trim();
+      const name = String(raw.Name || raw.name || raw['Item Name'] || raw['Product Name'] || '').trim();
       if (!name) continue;
-      const sku = String(raw.sku || raw.SKU || `SKU-${Date.now().toString().slice(-6)}`).trim();
-      const costPrice = Number(raw.costPrice || raw['Cost Price'] || 0) || 0;
-      const sellingPrice = Number(raw.sellingPrice || raw['Selling Price'] || 0) || 0;
-      const totalStock = Number(raw.totalStock || raw['Total Stock'] || 0) || 0;
-      const minStock = Number(raw.minStock || raw['Safety Stock'] || 5) || 5;
+      const sku = String(
+        raw.SKU ||
+          raw.sku ||
+          raw['Item Code'] ||
+          `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`
+      ).trim();
+      const category = String(raw.Category || raw.category || 'mobile phone').trim().toLowerCase();
+      const brand = String(raw.Brand || raw.brand || 'generic').trim().toLowerCase();
+      const unit = String(raw.Unit || raw.unit || 'pcs').trim();
+      const costPrice = Number(raw['Cost Price'] || raw.costPrice || raw['Unit Cost'] || raw.Cost || 0) || 0;
+      const sellingPrice = Number(raw['Selling Price'] || raw.sellingPrice || raw.Price || 0) || 0;
+      const totalStock =
+        Number(raw['Total Stock'] || raw.totalStock || raw.Quantity || raw.Stock || raw['Qty(Default Location)'] || 0) || 0;
+      const minStock = Number(raw['Safety Stock'] || raw.minStock || raw['Min Stock'] || 3) || 3;
 
       const existing = demoItems.find(
         (i) => i.sku === sku || i.name.toLowerCase() === name.toLowerCase()
@@ -380,16 +389,16 @@ export class InventoryStore {
           teamId,
           sku,
           name,
-          category: String(raw.category || 'General').toLowerCase(),
-          brand: String(raw.brand || 'Generic').toLowerCase(),
-          unit: 'pcs',
+          category,
+          brand,
+          unit,
           costPrice,
           sellingPrice,
           totalStock,
           minStock,
-          barcodes: raw.barcodes || [],
+          barcodes: raw.barcodes || (raw.Barcode ? [String(raw.Barcode).trim()] : []),
           images: [],
-          stockByLocation: [{ locationId: 'loc_1', locationName: 'Default Location', quantity: totalStock }],
+          stockByLocation: [{ locationId: 'loc_1', locationName: 'Main Store', quantity: totalStock }],
           isArchived: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),

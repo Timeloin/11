@@ -196,6 +196,64 @@ export default function App() {
     }
   };
 
+  const handleDeleteItem = async (item: IItem) => {
+    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
+    
+    // Optimistically remove from state
+    setItems((prev) => prev.filter((i) => i._id !== item._id));
+    setMetrics((prev) => ({
+      ...prev,
+      totalItems: Math.max(0, prev.totalItems - 1),
+      totalInventoryValue: Math.max(0, prev.totalInventoryValue - (Number(item.totalStock || 0) * Number(item.costPrice || 0))),
+    }));
+    setSelectedItemForDetail(null);
+    showToast(`🗑️ "${item.name}" deleted!`);
+
+    try {
+      await fetch(`/api/items/${item._id}?teamId=${activeTeamId}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.error('Delete item error:', err);
+    }
+  };
+
+  const handleUpdateItem = async (itemId: string, updatedData: Partial<IItem>) => {
+    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
+
+    // Optimistically update items list and selected item detail
+    setItems((prev) =>
+      prev.map((i) => (i._id === itemId ? { ...i, ...updatedData, updatedAt: new Date().toISOString() } : i))
+    );
+    setSelectedItemForDetail((prev) =>
+      prev && prev._id === itemId ? { ...prev, ...updatedData, updatedAt: new Date().toISOString() } : prev
+    );
+
+    if (updatedData.category && !categories.includes(updatedData.category.toLowerCase())) {
+      setCategories((prev) => [...prev, updatedData.category!.toLowerCase()]);
+    }
+    if (updatedData.brand && !brands.includes(updatedData.brand.toLowerCase())) {
+      setBrands((prev) => [...prev, updatedData.brand!.toLowerCase()]);
+    }
+
+    showToast('✏️ Item updated successfully!');
+
+    try {
+      const res = await fetch(`/api/items/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updatedData, teamId: activeTeamId }),
+      });
+      const data = await res.json();
+      if (data.success && data.item) {
+        setItems((prev) => prev.map((i) => (i._id === itemId ? data.item : i)));
+        setSelectedItemForDetail((prev) => (prev && prev._id === itemId ? data.item : prev));
+      }
+    } catch (err) {
+      console.error('Update item error:', err);
+    }
+  };
+
   const handleUpdateProfileName = async (newName: string) => {
     if (!session) return;
     const updatedSession = { ...session, userName: newName, name: newName };
@@ -515,6 +573,8 @@ export default function App() {
           onStockOut={(item) => openStockModal('stock_out', item)}
           onMoveStock={(item) => openStockModal('move', item)}
           onAdjustStock={(item) => openStockModal('adjust', item)}
+          onDeleteItem={handleDeleteItem}
+          onUpdateItem={handleUpdateItem}
         />
 
         <NewItemModal

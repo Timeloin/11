@@ -43,25 +43,54 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     document.body.removeChild(link);
   };
 
+  // Robust CSV parser supporting quotes, spaces, and commas
+  const parseCsvLine = (line: string): string[] => {
+    const fields: string[] = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          currentField += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        fields.push(currentField.trim());
+        currentField = '';
+      } else {
+        currentField += char;
+      }
+    }
+    fields.push(currentField.trim());
+    return fields;
+  };
+
   const parseCsvText = (text: string) => {
     const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length < 2) {
-      setErrorMsg('CSV file is empty or has no header row');
+      setErrorMsg('CSV file is empty or missing headers');
       return [];
     }
 
-    const headers = lines[0].split(',').map((h) => h.trim().replace(/^["']|["']$/g, ''));
+    const headers = parseCsvLine(lines[0]).map((h) => h.replace(/^["']|["']$/g, ''));
     const rows = [];
 
     for (let i = 1; i < lines.length; i++) {
-      // Regex for CSV with quoted commas
-      const matches = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
+      const values = parseCsvLine(lines[i]);
       const rowObj: any = {};
       headers.forEach((header, idx) => {
-        const val = matches[idx] ? matches[idx].trim().replace(/^["']|["']$/g, '') : '';
+        const val = values[idx] ? values[idx].replace(/^["']|["']$/g, '') : '';
         rowObj[header] = val;
       });
-      if (rowObj.Name || rowObj['Item Name'] || rowObj['Product Name'] || rowObj.sku || rowObj.SKU) {
+
+      const nameVal = rowObj.Name || rowObj.name || rowObj['Item Name'] || rowObj['Product Name'];
+      const skuVal = rowObj.SKU || rowObj.sku || rowObj['Item Code'];
+
+      if (nameVal || skuVal) {
         rows.push(rowObj);
       }
     }
@@ -113,7 +142,8 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
 
       const data = await res.json();
       if (data.success) {
-        setSuccessMsg(`Successfully imported ${data.imported || 0} new items and updated ${data.updated || 0} existing items!`);
+        const total = (data.imported || 0) + (data.updated || 0);
+        setSuccessMsg(`Successfully imported ${data.imported || 0} new items and updated ${data.updated || 0} items! (${total} total processed)`);
         setTimeout(() => {
           onSuccess();
           onClose();
@@ -218,9 +248,9 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
                   {parsedRows.slice(0, 4).map((row, i) => (
                     <div key={i} className="px-3 py-1.5 grid grid-cols-4 gap-2 text-gray-600 truncate">
                       <span className="font-medium text-gray-900 truncate">
-                        {row.Name || row['Item Name'] || row['Product Name'] || '—'}
+                        {row.Name || row.name || row['Item Name'] || row['Product Name'] || '—'}
                       </span>
-                      <span className="truncate text-gray-500">{row.SKU || row.sku || '—'}</span>
+                      <span className="truncate text-gray-500">{row.SKU || row.sku || row['Item Code'] || '—'}</span>
                       <span className="font-bold text-emerald-700">
                         {row['Total Stock'] || row.Stock || row.Quantity || row.totalStock || '0'}
                       </span>
