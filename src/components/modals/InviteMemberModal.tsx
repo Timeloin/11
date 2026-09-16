@@ -104,14 +104,13 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
 
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
-              Assigned Role
+              Assigned Staff Role
             </label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
               className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none font-medium"
             >
-              <option value="admin">Admin (Full Access)</option>
               <option value="manager">Manager (Inventory, Purchases, Sales, Reports)</option>
               <option value="sales">Sales (Stock Out, Orders & Invoices)</option>
               <option value="inventory">Inventory (Stock In/Out/Move/Adjust)</option>

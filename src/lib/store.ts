@@ -90,7 +90,31 @@ let demoCategories: string[] = ['mobile phone', 'accessories', 'smartwatch', 'ta
 let demoBrands: string[] = ['vivo', 'samsung', 'apple', 'oneplus', 'generic', 'boat'];
 
 export class InventoryStore {
-  // Authentication: 1 Main Admin + Staff Members (No expiration limits)
+  // Always resolves to the single unified primary store in database
+  static async getPrimaryTeamId(preferredTeamId?: string): Promise<string> {
+    if (process.env.MONGODB_URI) {
+      try {
+        await connectDB();
+        let team = await Team.findOne({}).sort({ createdAt: 1 });
+        if (!team) {
+          const envAdminEmail = (process.env.SUPER_ADMIN_EMAIL || SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
+          team = await Team.create({
+            name: 'Simran Mobile',
+            ownerEmail: envAdminEmail || 'admin@simranmobile.com',
+            ownerName: 'Main Admin',
+            inviteCode: 'SIMRAN88',
+            currency: '₹',
+          });
+        }
+        return team._id.toString();
+      } catch (e) {
+        console.error('getPrimaryTeamId error:', e);
+      }
+    }
+    return 'team_1';
+  }
+
+  // Authentication: Exactly 1 Main Admin (from Vercel env) + Shared Staff Members
   static async authenticateUser(email: string, pass: string): Promise<{
     success: boolean;
     error?: string;
@@ -102,28 +126,10 @@ export class InventoryStore {
     const envAdminEmail = (process.env.SUPER_ADMIN_EMAIL || SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
     const envAdminPass = process.env.SUPER_ADMIN_PASSWORD || SUPER_ADMIN_PASSWORD || '';
 
-    // 1. Main Admin direct login using Vercel env credentials
-    if (envAdminEmail && envAdminPass && cleanEmail === envAdminEmail && cleanPass === envAdminPass) {
-      let mainTeamId = 'team_1';
-      if (process.env.MONGODB_URI) {
-        try {
-          await connectDB();
-          let team = await Team.findOne({}).sort({ createdAt: 1 });
-          if (!team) {
-            team = await Team.create({
-              name: 'Simran Mobile',
-              ownerEmail: envAdminEmail,
-              ownerName: 'Main Admin',
-              inviteCode: 'SIMRAN88',
-              currency: '₹',
-            });
-          }
-          mainTeamId = team._id.toString();
-        } catch (e) {
-          console.error('Error fetching main team on admin login:', e);
-        }
-      }
+    const primaryTeamId = await this.getPrimaryTeamId();
 
+    // 1. Main Admin direct login using Vercel env credentials (ONLY 1 MAIN ADMIN)
+    if (envAdminEmail && envAdminPass && cleanEmail === envAdminEmail && cleanPass === envAdminPass) {
       return {
         success: true,
         session: {
@@ -131,13 +137,13 @@ export class InventoryStore {
           name: 'Main Admin',
           email: envAdminEmail,
           role: 'admin',
-          activeTeamId: mainTeamId,
+          activeTeamId: primaryTeamId,
           isSuperAdmin: false,
         },
       };
     }
 
-    // 2. Check MongoDB for staff members / users
+    // 2. Check MongoDB for staff members (They share the exact same team & database)
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
@@ -147,21 +153,15 @@ export class InventoryStore {
             (user.plainPassword && user.plainPassword === cleanPass) ||
             (await comparePassword(cleanPass, user.passwordHash || ''));
           if (isMatch) {
-            let team = await Team.findOne({ ownerId: user._id });
-            let memberRole: Role = user.role || 'admin';
+            let memberRole: Role = 'manager';
             let customPerms: CustomPermissions | undefined = undefined;
 
-            if (!team) {
-              const membership = await TeamMember.findOne({ userId: user._id });
-              if (membership) {
-                team = await Team.findById(membership.teamId);
-                memberRole = membership.role;
-                customPerms = membership.customPermissions;
-              }
-            }
-
-            if (!team) {
-              team = await Team.findOne({}).sort({ createdAt: 1 });
+            const membership = await TeamMember.findOne({ email: cleanEmail });
+            if (membership) {
+              memberRole = membership.role;
+              customPerms = membership.customPermissions;
+            } else if (user.role && user.role !== 'admin') {
+              memberRole = user.role;
             }
 
             return {
@@ -170,7 +170,7 @@ export class InventoryStore {
                 userId: user._id.toString(),
                 name: user.name,
                 email: user.email,
-                activeTeamId: team ? team._id.toString() : 'team_1',
+                activeTeamId: primaryTeamId, // Shared single database
                 role: memberRole,
                 isSuperAdmin: false,
                 permissions: customPerms,
@@ -183,39 +183,18 @@ export class InventoryStore {
       }
     }
 
-    // 3. Fallback demo memory auth
-    const memUser = demoUsers.find(
-      (u) => u.email === cleanEmail && (u.plainPassword === cleanPass || cleanPass === 'password123')
-    );
-    if (memUser) {
-      const team =
-        demoTeams.find((t) => t.ownerId === memUser._id || t._id === memUser.defaultTeamId) || demoTeams[0];
-      return {
-        success: true,
-        session: {
-          userId: memUser._id,
-          name: memUser.name,
-          email: memUser.email,
-          activeTeamId: team?._id || 'team_1',
-          role: memUser.role || 'admin',
-          isSuperAdmin: false,
-        },
-      };
-    }
-
-    // Also check demo members
+    // 3. Fallback demo memory auth for members (all sharing team_1)
     const memStaff = demoMembers.find(
       (m) => m.email.toLowerCase() === cleanEmail && (m.password === cleanPass || cleanPass === 'password123')
     );
     if (memStaff) {
-      const team = demoTeams.find((t) => t._id === memStaff.teamId) || demoTeams[0];
       return {
         success: true,
         session: {
           userId: memStaff.userId,
           name: memStaff.name,
           email: memStaff.email,
-          activeTeamId: team._id,
+          activeTeamId: 'team_1',
           role: memStaff.role,
           isSuperAdmin: false,
           permissions: memStaff.customPermissions,
@@ -449,6 +428,7 @@ export class InventoryStore {
     customPermissions?: CustomPermissions;
   }): Promise<ITeamMember> {
     const cleanEmail = memberData.email.trim().toLowerCase();
+    const targetTeamId = await this.getPrimaryTeamId(teamId);
 
     if (process.env.MONGODB_URI) {
       try {
@@ -464,12 +444,12 @@ export class InventoryStore {
             plainPassword: memberData.password,
             role: memberData.role,
             isSuperAdmin: false,
-            defaultTeamId: teamId,
+            defaultTeamId: targetTeamId,
           });
         }
 
         const member = await TeamMember.create({
-          teamId,
+          teamId: targetTeamId,
           userId: user._id,
           name: memberData.name,
           email: cleanEmail,
@@ -487,7 +467,7 @@ export class InventoryStore {
 
     const member: ITeamMember = {
       _id: 'member_' + Math.random().toString(36).substr(2, 7),
-      teamId,
+      teamId: 'team_1',
       userId: 'user_' + Math.random().toString(36).substr(2, 7),
       name: memberData.name,
       email: cleanEmail,
@@ -621,25 +601,26 @@ export class InventoryStore {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        const locs = await Location.find({ teamId, isArchived: false }).lean();
+        const locs = await Location.find({ isArchived: false }).lean();
         if (locs && locs.length > 0) return JSON.parse(JSON.stringify(locs));
       } catch (e) {}
     }
-    return demoLocations.filter(l => l.teamId === teamId && !l.isArchived);
+    return demoLocations.filter(l => !l.isArchived);
   }
 
   static async addLocation(teamId: string, name: string): Promise<ILocation> {
+    const targetTeamId = await this.getPrimaryTeamId(teamId);
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        const loc = await Location.create({ teamId, name, isDefault: false, isArchived: false });
+        const loc = await Location.create({ teamId: targetTeamId, name, isDefault: false, isArchived: false });
         return JSON.parse(JSON.stringify(loc));
       } catch (e) {}
     }
 
     const loc: ILocation = {
       _id: 'loc_' + Math.random().toString(36).substr(2, 7),
-      teamId,
+      teamId: 'team_1',
       name,
       isDefault: false,
       isArchived: false,
@@ -655,7 +636,6 @@ export class InventoryStore {
       try {
         await connectDB();
         let filter: any = { isArchived: false };
-        if (teamId && teamId !== 'all') filter.teamId = teamId;
         if (query?.search) {
           filter.$or = [
             { name: { $regex: query.search, $options: 'i' } },
@@ -679,7 +659,7 @@ export class InventoryStore {
       }
     }
 
-    let items = demoItems.filter(i => (teamId === 'all' || i.teamId === teamId) && !i.isArchived);
+    let items = demoItems.filter(i => !i.isArchived);
     if (query?.search) {
       const q = query.search.toLowerCase().trim();
       items = items.filter(i => 
@@ -702,12 +682,13 @@ export class InventoryStore {
 
   static async createItem(teamId: string, itemData: Partial<IItem>): Promise<IItem> {
     const initialQty = Number(itemData.totalStock) || 0;
-    const defaultLoc = demoLocations.find(l => l.teamId === teamId && l.isDefault) || demoLocations[0];
+    const targetTeamId = await this.getPrimaryTeamId(teamId);
+    const defaultLoc = demoLocations.find(l => l.teamId === targetTeamId && l.isDefault) || demoLocations[0];
     
     const stockByLocation = itemData.stockByLocation || [
       {
         locationId: defaultLoc ? defaultLoc._id : 'loc_1',
-        locationName: defaultLoc ? defaultLoc.name : 'Default Location',
+        locationName: defaultLoc ? defaultLoc.name : 'Main Store',
         quantity: initialQty
       }
     ];
@@ -716,7 +697,7 @@ export class InventoryStore {
       try {
         await connectDB();
         const newItem = await Item.create({
-          teamId,
+          teamId: targetTeamId,
           sku: itemData.sku || 'SKU-' + Date.now().toString().slice(-6),
           name: itemData.name || 'Untitled Item',
           description: itemData.description || '',
@@ -735,7 +716,7 @@ export class InventoryStore {
 
         if (initialQty > 0) {
           await StockTransaction.create({
-            teamId,
+            teamId: targetTeamId,
             type: 'stock_in',
             referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
             toLocationId: stockByLocation[0].locationId,
@@ -750,8 +731,8 @@ export class InventoryStore {
             }],
             totalQuantity: initialQty,
             reason: 'Initial Item Creation',
-            userId: '65f000000000000000000001',
-            userName: 'Admin User',
+            userId: 'user_admin',
+            userName: 'Main Admin',
           });
         }
 
@@ -763,7 +744,7 @@ export class InventoryStore {
 
     const newItem: IItem = {
       _id: 'item_' + Math.random().toString(36).substr(2, 7),
-      teamId,
+      teamId: 'team_1',
       sku: itemData.sku || 'SKU-' + Math.floor(100000 + Math.random() * 900000),
       name: itemData.name || 'Untitled Item',
       description: itemData.description || '',
@@ -790,25 +771,21 @@ export class InventoryStore {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        let filter: any = { _id: id, isArchived: false };
-        if (teamId && teamId !== 'all') filter.teamId = teamId;
-        const item = await Item.findOne(filter).lean();
+        const item = await Item.findOne({ _id: id, isArchived: false }).lean();
         if (item) return JSON.parse(JSON.stringify(item));
       } catch (e) {
         console.error('MongoDB getItemById error:', e);
       }
     }
-    return demoItems.find(i => i._id === id && (teamId === 'all' || i.teamId === teamId) && !i.isArchived) || null;
+    return demoItems.find(i => i._id === id && !i.isArchived) || null;
   }
 
   static async updateItem(teamId: string, id: string, data: Partial<IItem>): Promise<IItem | null> {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        let filter: any = { _id: id };
-        if (teamId && teamId !== 'all') filter.teamId = teamId;
         const item = await Item.findOneAndUpdate(
-          filter,
+          { _id: id },
           { ...data, updatedAt: new Date() },
           { new: true }
         ).lean();
@@ -818,7 +795,7 @@ export class InventoryStore {
       }
     }
 
-    const idx = demoItems.findIndex(i => i._id === id && (teamId === 'all' || i.teamId === teamId));
+    const idx = demoItems.findIndex(i => i._id === id);
     if (idx !== -1) {
       demoItems[idx] = { ...demoItems[idx], ...data, updatedAt: new Date().toISOString() };
       return demoItems[idx];
@@ -830,16 +807,14 @@ export class InventoryStore {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        let filter: any = { _id: id };
-        if (teamId && teamId !== 'all') filter.teamId = teamId;
-        await Item.findOneAndUpdate(filter, { isArchived: true });
+        await Item.findOneAndUpdate({ _id: id }, { isArchived: true });
         return true;
       } catch (e) {
         console.error('MongoDB deleteItem error:', e);
       }
     }
 
-    const idx = demoItems.findIndex(i => i._id === id && (teamId === 'all' || i.teamId === teamId));
+    const idx = demoItems.findIndex(i => i._id === id);
     if (idx !== -1) {
       demoItems[idx].isArchived = true;
       return true;
@@ -847,36 +822,51 @@ export class InventoryStore {
     return false;
   }
 
+  static async deleteAllItems(teamId: string): Promise<boolean> {
+    if (process.env.MONGODB_URI) {
+      try {
+        await connectDB();
+        await Item.deleteMany({});
+        return true;
+      } catch (e) {
+        console.error('MongoDB deleteAllItems error:', e);
+      }
+    }
+
+    demoItems.length = 0;
+    return true;
+  }
+
   static async findItemByBarcode(teamId: string, code: string): Promise<IItem | null> {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        let filter: any = { barcodes: code, isArchived: false };
-        if (teamId && teamId !== 'all') filter.teamId = teamId;
-        const item = await Item.findOne(filter).lean();
+        const item = await Item.findOne({ barcodes: code, isArchived: false }).lean();
         if (item) return JSON.parse(JSON.stringify(item));
       } catch (e) {
         console.error('MongoDB findItemByBarcode error:', e);
       }
     }
 
-    return demoItems.find(i => (teamId === 'all' || i.teamId === teamId) && !i.isArchived && i.barcodes.includes(code)) || null;
+    return demoItems.find(i => !i.isArchived && i.barcodes.includes(code)) || null;
   }
 
   // Transactions
   static async recordTransaction(data: Omit<IStockTransaction, '_id' | 'referenceNo' | 'createdAt'>): Promise<IStockTransaction> {
     const referenceNo = 'TXN-' + Math.floor(100000 + Math.random() * 900000);
     const totalQty = Number(data.totalQuantity) || data.items.reduce((acc, it) => acc + Number(it.quantity || 0), 0);
+    const targetTeamId = await this.getPrimaryTeamId(data.teamId);
 
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
         const txn = await StockTransaction.create({
           ...data,
+          teamId: targetTeamId,
           totalQuantity: totalQty,
           referenceNo,
-          userId: data.userId || '65f000000000000000000001',
-          userName: data.userName || 'Admin User',
+          userId: data.userId || 'user_admin',
+          userName: data.userName || 'Main Admin',
         });
 
         for (const line of data.items) {
@@ -1023,13 +1013,11 @@ export class InventoryStore {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        let filter: any = {};
-        if (teamId && teamId !== 'all') filter.teamId = teamId;
-        const txns = await StockTransaction.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+        const txns = await StockTransaction.find({}).sort({ createdAt: -1 }).limit(limit).lean();
         if (txns && txns.length > 0) return JSON.parse(JSON.stringify(txns));
       } catch (e) {}
     }
-    return demoTransactions.filter(t => teamId === 'all' || t.teamId === teamId).slice(0, limit);
+    return demoTransactions.slice(0, limit);
   }
 
   // Categories & Brands
@@ -1053,11 +1041,11 @@ export class InventoryStore {
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        const mems = await TeamMember.find({ teamId }).lean();
+        const mems = await TeamMember.find({}).lean();
         if (mems) return JSON.parse(JSON.stringify(mems));
       } catch (e) {}
     }
-    return demoMembers.filter(m => m.teamId === teamId);
+    return demoMembers;
   }
 
   // Metrics

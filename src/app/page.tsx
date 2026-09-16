@@ -254,6 +254,28 @@ export default function App() {
     }
   };
 
+  const handleDeleteAllItems = async () => {
+    const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
+
+    // Optimistically clear all items and reset inventory metrics
+    setItems([]);
+    setMetrics((prev) => ({
+      ...prev,
+      totalItems: 0,
+      totalInventoryValue: 0,
+    }));
+    setSelectedItemForDetail(null);
+    showToast('🗑️ All items deleted successfully!');
+
+    try {
+      await fetch(`/api/items?teamId=${activeTeamId}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.error('Delete all items error:', err);
+    }
+  };
+
   const handleUpdateProfileName = async (newName: string) => {
     if (!session) return;
     const updatedSession = { ...session, userName: newName, name: newName };
@@ -556,6 +578,7 @@ export default function App() {
               onAddLocation={handleAddLocation}
               onExportData={handleExportCSV}
               onOpenImportData={() => setIsCsvImportOpen(true)}
+              onDeleteAllItems={handleDeleteAllItems}
             />
           )}
         </main>

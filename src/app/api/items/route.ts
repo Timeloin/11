@@ -29,3 +29,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const teamId = searchParams.get('teamId') || 'team_1';
+    const ok = await InventoryStore.deleteAllItems(teamId);
+    return NextResponse.json({ success: ok });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
