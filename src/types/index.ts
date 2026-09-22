@@ -83,7 +83,9 @@ export type TransactionType =
   | 'purchase'
   | 'sale'
   | 'return'
-  | 'count_reconciliation';
+  | 'count_reconciliation'
+  | 'create_item'
+  | 'delete_item';
 
 export interface ITransactionItem {
   itemId: string;
@@ -111,6 +113,10 @@ export interface IStockTransaction {
   userId: string;
   userName: string;
   createdAt: string;
+  isUndone?: boolean;
+  undoneAt?: string;
+  undoneBy?: string;
+  snapshotData?: any;
 }
 
 export interface ITeamMember {

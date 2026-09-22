@@ -26,7 +26,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   const teamId = searchParams.get('teamId') || 'team_1';
+  const operatorName = searchParams.get('operatorName') || 'Main Admin';
+  const userId = searchParams.get('userId') || 'user_admin';
 
-  const ok = await InventoryStore.deleteItem(teamId, id);
+  const ok = await InventoryStore.deleteItem(teamId, id, operatorName, userId);
   return NextResponse.json({ success: ok });
 }

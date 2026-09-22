@@ -13,7 +13,7 @@ const StockTransactionSchema = new Schema({
   teamId: { type: Schema.Types.Mixed, required: true, index: true },
   type: { 
     type: String, 
-    enum: ['stock_in', 'stock_out', 'move', 'adjust', 'purchase', 'sale', 'return', 'count_reconciliation'], 
+    enum: ['stock_in', 'stock_out', 'move', 'adjust', 'purchase', 'sale', 'return', 'count_reconciliation', 'create_item', 'delete_item'], 
     required: true 
   },
   referenceNo: { type: String, required: true },
@@ -28,6 +28,10 @@ const StockTransactionSchema = new Schema({
   invoiceNo: { type: String },
   userId: { type: Schema.Types.Mixed, required: false },
   userName: { type: String, required: false, default: 'Admin User' },
+  isUndone: { type: Boolean, default: false },
+  undoneAt: { type: Date },
+  undoneBy: { type: String },
+  snapshotData: { type: Schema.Types.Mixed },
 }, { timestamps: true });
 
 export default mongoose.models.StockTransaction || mongoose.model('StockTransaction', StockTransactionSchema);

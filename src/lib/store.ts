@@ -822,27 +822,27 @@ export class InventoryStore {
           isArchived: false,
         });
 
-        if (initialQty > 0) {
-          await StockTransaction.create({
-            teamId: targetTeamId,
-            type: 'stock_in',
-            referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
-            toLocationId: stockByLocation[0].locationId,
-            toLocationName: stockByLocation[0].locationName,
-            items: [{
-              itemId: newItem._id,
-              sku: newItem.sku,
-              name: newItem.name,
-              quantity: initialQty,
-              unitCost: Number(itemData.costPrice) || 0,
-              unitPrice: Number(itemData.sellingPrice) || 0,
-            }],
-            totalQuantity: initialQty,
-            reason: 'Initial Item Creation',
-            userId: 'user_admin',
-            userName: 'Main Admin',
-          });
-        }
+        // Always record create_item transaction for auditing and undo capability
+        await StockTransaction.create({
+          teamId: targetTeamId,
+          type: 'create_item',
+          referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
+          toLocationId: stockByLocation[0]?.locationId,
+          toLocationName: stockByLocation[0]?.locationName,
+          items: [{
+            itemId: newItem._id,
+            sku: newItem.sku,
+            name: newItem.name,
+            quantity: initialQty,
+            unitCost: Number(itemData.costPrice) || 0,
+            unitPrice: Number(itemData.sellingPrice) || 0,
+          }],
+          totalQuantity: initialQty,
+          reason: 'Item Created / Added to Inventory',
+          userId: (itemData as any).userId || 'user_admin',
+          userName: (itemData as any).userName || 'Main Admin',
+          snapshotData: JSON.parse(JSON.stringify(newItem)),
+        });
 
         return JSON.parse(JSON.stringify(newItem));
       } catch (e) {
@@ -872,6 +872,26 @@ export class InventoryStore {
     };
 
     demoItems.unshift(newItem);
+    demoTransactions.unshift({
+      _id: 'txn_' + Date.now(),
+      teamId: 'team_1',
+      type: 'create_item',
+      referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
+      items: [{
+        itemId: newItem._id,
+        sku: newItem.sku,
+        name: newItem.name,
+        quantity: initialQty,
+        unitCost: newItem.costPrice,
+        unitPrice: newItem.sellingPrice,
+      }],
+      totalQuantity: initialQty,
+      reason: 'Item Created / Added to Inventory',
+      userId: (itemData as any).userId || 'user_admin',
+      userName: (itemData as any).userName || 'Main Admin',
+      snapshotData: { ...newItem },
+      createdAt: new Date().toISOString(),
+    });
     return newItem;
   }
 
@@ -911,12 +931,41 @@ export class InventoryStore {
     return null;
   }
 
-  static async deleteItem(teamId: string, id: string): Promise<boolean> {
+  static async deleteItem(
+    teamId: string,
+    id: string,
+    operatorName: string = 'Main Admin',
+    userId: string = 'user_admin'
+  ): Promise<boolean> {
+    const targetTeamId = await this.getPrimaryTeamId(teamId);
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        await Item.findOneAndUpdate({ _id: id }, { isArchived: true });
-        return true;
+        const existing = await Item.findById(id).lean();
+        if (existing) {
+          await Item.findOneAndUpdate({ _id: id }, { isArchived: true });
+
+          // Record 'delete_item' transaction with complete snapshot for restoration
+          await StockTransaction.create({
+            teamId: targetTeamId,
+            type: 'delete_item',
+            referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
+            items: [{
+              itemId: existing._id,
+              sku: existing.sku,
+              name: existing.name,
+              quantity: existing.totalStock || 0,
+              unitCost: existing.costPrice || 0,
+              unitPrice: existing.sellingPrice || 0,
+            }],
+            totalQuantity: existing.totalStock || 0,
+            reason: `Item Deleted: "${existing.name}"`,
+            userId: userId || 'user_admin',
+            userName: operatorName || 'Main Admin',
+            snapshotData: JSON.parse(JSON.stringify(existing)),
+          });
+          return true;
+        }
       } catch (e) {
         console.error('MongoDB deleteItem error:', e);
       }
@@ -924,23 +973,98 @@ export class InventoryStore {
 
     const idx = demoItems.findIndex(i => i._id === id);
     if (idx !== -1) {
-      demoItems[idx].isArchived = true;
+      const item = demoItems[idx];
+      item.isArchived = true;
+      demoTransactions.unshift({
+        _id: 'txn_' + Date.now(),
+        teamId: 'team_1',
+        type: 'delete_item',
+        referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
+        items: [{
+          itemId: item._id,
+          sku: item.sku,
+          name: item.name,
+          quantity: item.totalStock || 0,
+          unitCost: item.costPrice || 0,
+          unitPrice: item.sellingPrice || 0,
+        }],
+        totalQuantity: item.totalStock || 0,
+        reason: `Item Deleted: "${item.name}"`,
+        userId: userId || 'user_admin',
+        userName: operatorName || 'Main Admin',
+        snapshotData: { ...item },
+        createdAt: new Date().toISOString(),
+      });
       return true;
     }
     return false;
   }
 
-  static async deleteAllItems(teamId: string): Promise<boolean> {
+  static async deleteAllItems(
+    teamId: string,
+    operatorName: string = 'Main Admin',
+    userId: string = 'user_admin'
+  ): Promise<boolean> {
+    const targetTeamId = await this.getPrimaryTeamId(teamId);
     if (process.env.MONGODB_URI) {
       try {
         await connectDB();
-        await Item.deleteMany({});
+        const activeItems = await Item.find({ isArchived: false }).lean();
+        if (activeItems.length > 0) {
+          // Soft delete all items so they can be restored if undone
+          await Item.updateMany({ isArchived: false }, { isArchived: true });
+
+          // Record delete_item transaction for each or batch
+          for (const it of activeItems) {
+            await StockTransaction.create({
+              teamId: targetTeamId,
+              type: 'delete_item',
+              referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
+              items: [{
+                itemId: it._id,
+                sku: it.sku,
+                name: it.name,
+                quantity: it.totalStock || 0,
+                unitCost: it.costPrice || 0,
+                unitPrice: it.sellingPrice || 0,
+              }],
+              totalQuantity: it.totalStock || 0,
+              reason: 'Bulk All Items Deletion',
+              userId: userId || 'user_admin',
+              userName: operatorName || 'Main Admin',
+              snapshotData: JSON.parse(JSON.stringify(it)),
+            });
+          }
+        }
         return true;
       } catch (e) {
         console.error('MongoDB deleteAllItems error:', e);
       }
     }
 
+    for (const it of demoItems) {
+      it.isArchived = true;
+      demoTransactions.unshift({
+        _id: 'txn_' + Date.now() + Math.random().toString().slice(-4),
+        teamId: 'team_1',
+        type: 'delete_item',
+        referenceNo: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
+        items: [{
+          itemId: it._id,
+          sku: it.sku,
+          name: it.name,
+          quantity: it.totalStock || 0,
+          unitCost: it.costPrice || 0,
+          unitPrice: it.sellingPrice || 0,
+        }],
+        totalQuantity: it.totalStock || 0,
+        reason: 'Bulk All Items Deletion',
+        userId: userId || 'user_admin',
+        userName: operatorName || 'Main Admin',
+        snapshotData: { ...it },
+        createdAt: new Date().toISOString(),
+      });
+    }
     demoItems.length = 0;
     return true;
   }
@@ -977,6 +1101,7 @@ export class InventoryStore {
           userName: data.userName || 'Main Admin',
         });
 
+        const snapshots: any[] = [];
         for (const line of data.items) {
           let item: any = null;
           try {
@@ -992,6 +1117,14 @@ export class InventoryStore {
             });
           }
           if (!item) continue;
+
+          // Preserve exact pre-change stock distribution for rollback / undo
+          snapshots.push({
+            itemId: item._id.toString(),
+            previousStockByLocation: JSON.parse(JSON.stringify(item.stockByLocation || [])),
+            previousTotalStock: item.totalStock,
+          });
+
           const qty = Number(line.quantity) || 0;
 
           if (!item.stockByLocation || item.stockByLocation.length === 0) {
@@ -1046,6 +1179,11 @@ export class InventoryStore {
           await item.save();
         }
 
+        if (snapshots.length > 0) {
+          txn.snapshotData = snapshots;
+          await txn.save();
+        }
+
         // Silent Background Auto-Rotation:
         // When transaction count reaches 400, automatically delete the oldest 100 transactions
         try {
@@ -1073,9 +1211,16 @@ export class InventoryStore {
     }
 
     // In-memory fallback stock update
+    const inMemSnapshots: any[] = [];
     for (const line of data.items) {
       const item = demoItems.find(i => i._id === line.itemId);
       if (item) {
+        inMemSnapshots.push({
+          itemId: item._id,
+          previousStockByLocation: JSON.parse(JSON.stringify(item.stockByLocation || [])),
+          previousTotalStock: item.totalStock,
+        });
+
         const qty = Number(line.quantity) || 0;
         if (!item.stockByLocation || item.stockByLocation.length === 0) {
           item.stockByLocation = [{ locationId: 'loc_1', locationName: 'Default Location', quantity: item.totalStock || 0 }];
@@ -1097,6 +1242,7 @@ export class InventoryStore {
       referenceNo,
       ...data,
       totalQuantity: totalQty,
+      snapshotData: inMemSnapshots,
       createdAt: new Date().toISOString()
     };
     demoTransactions.unshift(txn);
@@ -1126,6 +1272,222 @@ export class InventoryStore {
       } catch (e) {}
     }
     return demoTransactions.slice(0, limit);
+  }
+
+  // Undo / Revert Transaction & Restore Inventory
+  static async undoTransaction(
+    transactionId: string,
+    operatorName: string = 'Main Admin',
+    userId: string = 'user_admin'
+  ): Promise<{ success: boolean; message: string; transaction: IStockTransaction; restoredItem?: any }> {
+    if (process.env.MONGODB_URI) {
+      try {
+        await connectDB();
+        const txn = await StockTransaction.findById(transactionId);
+        if (!txn) throw new Error('Transaction not found');
+        if (txn.isUndone) throw new Error('This transaction has already been undone.');
+
+        let restoredItem: any = null;
+
+        if (txn.type === 'delete_item') {
+          // Revert deletion: restore item into catalog
+          const targetId = txn.items?.[0]?.itemId || txn.snapshotData?._id;
+          let item = targetId ? await Item.findById(targetId) : null;
+          if (item) {
+            item.isArchived = false;
+            await item.save();
+            restoredItem = JSON.parse(JSON.stringify(item));
+          } else if (txn.snapshotData) {
+            const dataToRestore = { ...txn.snapshotData, isArchived: false };
+            delete dataToRestore._id;
+            const recreated = await Item.create(dataToRestore);
+            restoredItem = JSON.parse(JSON.stringify(recreated));
+          }
+        } else if (txn.type === 'create_item') {
+          // Revert creation: archive the newly created item
+          const targetId = txn.items?.[0]?.itemId || txn.snapshotData?._id;
+          if (targetId) {
+            await Item.findOneAndUpdate({ _id: targetId }, { isArchived: true });
+          }
+        } else if (txn.type === 'stock_in' || txn.type === 'purchase') {
+          // Revert stock-in: deduct quantity
+          for (const line of txn.items || []) {
+            const item = await Item.findById(line.itemId);
+            if (item) {
+              const qty = Number(line.quantity) || 0;
+              let loc = item.stockByLocation?.find(
+                (l: any) => txn.toLocationId && l.locationId?.toString() === txn.toLocationId?.toString()
+              );
+              if (!loc && item.stockByLocation?.length > 0) loc = item.stockByLocation[0];
+              if (loc) {
+                loc.quantity = Math.max(0, (Number(loc.quantity) || 0) - qty);
+              }
+              item.totalStock = (item.stockByLocation || []).reduce(
+                (acc: number, curr: any) => acc + Number(curr.quantity || 0),
+                0
+              );
+              await item.save();
+              restoredItem = JSON.parse(JSON.stringify(item));
+            }
+          }
+        } else if (txn.type === 'stock_out' || txn.type === 'sale') {
+          // Revert stock-out: restore quantity back
+          for (const line of txn.items || []) {
+            const item = await Item.findById(line.itemId);
+            if (item) {
+              const qty = Number(line.quantity) || 0;
+              let loc = item.stockByLocation?.find(
+                (l: any) => txn.fromLocationId && l.locationId?.toString() === txn.fromLocationId?.toString()
+              );
+              if (!loc && item.stockByLocation?.length > 0) loc = item.stockByLocation[0];
+              if (loc) {
+                loc.quantity = (Number(loc.quantity) || 0) + qty;
+              }
+              item.totalStock = (item.stockByLocation || []).reduce(
+                (acc: number, curr: any) => acc + Number(curr.quantity || 0),
+                0
+              );
+              await item.save();
+              restoredItem = JSON.parse(JSON.stringify(item));
+            }
+          }
+        } else if (txn.type === 'move') {
+          // Revert move: deduct from toLocation, add back to fromLocation
+          for (const line of txn.items || []) {
+            const item = await Item.findById(line.itemId);
+            if (item) {
+              const qty = Number(line.quantity) || 0;
+              let toLoc = item.stockByLocation?.find(
+                (l: any) => txn.toLocationId && l.locationId?.toString() === txn.toLocationId?.toString()
+              );
+              if (toLoc) toLoc.quantity = Math.max(0, (Number(toLoc.quantity) || 0) - qty);
+
+              let fromLoc = item.stockByLocation?.find(
+                (l: any) => txn.fromLocationId && l.locationId?.toString() === txn.fromLocationId?.toString()
+              );
+              if (fromLoc) fromLoc.quantity = (Number(fromLoc.quantity) || 0) + qty;
+
+              item.totalStock = (item.stockByLocation || []).reduce(
+                (acc: number, curr: any) => acc + Number(curr.quantity || 0),
+                0
+              );
+              await item.save();
+              restoredItem = JSON.parse(JSON.stringify(item));
+            }
+          }
+        } else if (txn.type === 'adjust') {
+          // Revert adjustment: restore prior snapshot if available
+          const snapshots = Array.isArray(txn.snapshotData) ? txn.snapshotData : [txn.snapshotData];
+          for (const snap of snapshots) {
+            if (snap && snap.itemId && snap.previousStockByLocation) {
+              const item = await Item.findById(snap.itemId);
+              if (item) {
+                item.stockByLocation = snap.previousStockByLocation;
+                item.totalStock = snap.previousTotalStock ?? item.stockByLocation.reduce(
+                  (acc: number, curr: any) => acc + Number(curr.quantity || 0),
+                  0
+                );
+                await item.save();
+                restoredItem = JSON.parse(JSON.stringify(item));
+              }
+            }
+          }
+        }
+
+        txn.isUndone = true;
+        txn.undoneAt = new Date();
+        txn.undoneBy = operatorName || 'Main Admin';
+        await txn.save();
+
+        return {
+          success: true,
+          message: 'Transaction undone and inventory state restored successfully.',
+          transaction: JSON.parse(JSON.stringify(txn)),
+          restoredItem,
+        };
+      } catch (err: any) {
+        console.error('MongoDB undoTransaction error:', err);
+        throw err;
+      }
+    }
+
+    // In-memory fallback
+    const txn = demoTransactions.find(t => t._id === transactionId);
+    if (!txn) throw new Error('Transaction not found');
+    if (txn.isUndone) throw new Error('This transaction has already been undone.');
+
+    let restoredItem: any = null;
+
+    if (txn.type === 'delete_item') {
+      const targetId = txn.items?.[0]?.itemId || txn.snapshotData?._id;
+      const memItem = demoItems.find(i => i._id === targetId);
+      if (memItem) {
+        memItem.isArchived = false;
+        restoredItem = memItem;
+      } else if (txn.snapshotData) {
+        const restored = { ...txn.snapshotData, isArchived: false };
+        demoItems.unshift(restored);
+        restoredItem = restored;
+      }
+    } else if (txn.type === 'create_item') {
+      const targetId = txn.items?.[0]?.itemId || txn.snapshotData?._id;
+      const memItem = demoItems.find(i => i._id === targetId);
+      if (memItem) memItem.isArchived = true;
+    } else if (txn.type === 'stock_in' || txn.type === 'purchase') {
+      for (const line of txn.items || []) {
+        const item = demoItems.find(i => i._id === line.itemId);
+        if (item) {
+          const qty = Number(line.quantity) || 0;
+          if (item.stockByLocation?.[0]) {
+            item.stockByLocation[0].quantity = Math.max(0, item.stockByLocation[0].quantity - qty);
+          }
+          item.totalStock = Math.max(0, (Number(item.totalStock) || 0) - qty);
+          restoredItem = item;
+        }
+      }
+    } else if (txn.type === 'stock_out' || txn.type === 'sale') {
+      for (const line of txn.items || []) {
+        const item = demoItems.find(i => i._id === line.itemId);
+        if (item) {
+          const qty = Number(line.quantity) || 0;
+          if (item.stockByLocation?.[0]) {
+            item.stockByLocation[0].quantity += qty;
+          }
+          item.totalStock = (Number(item.totalStock) || 0) + qty;
+          restoredItem = item;
+        }
+      }
+    } else if (txn.type === 'move') {
+      for (const line of txn.items || []) {
+        const item = demoItems.find(i => i._id === line.itemId);
+        if (item) {
+          restoredItem = item;
+        }
+      }
+    } else if (txn.type === 'adjust') {
+      const snapshots = Array.isArray(txn.snapshotData) ? txn.snapshotData : [txn.snapshotData];
+      for (const snap of snapshots) {
+        if (snap && snap.itemId) {
+          const item = demoItems.find(i => i._id === snap.itemId);
+          if (item && snap.previousStockByLocation) {
+            item.stockByLocation = snap.previousStockByLocation;
+            item.totalStock = snap.previousTotalStock ?? item.totalStock;
+            restoredItem = item;
+          }
+        }
+      }
+    }
+
+    txn.isUndone = true;
+    txn.undoneAt = new Date().toISOString();
+    txn.undoneBy = operatorName || 'Main Admin';
+
+    return {
+      success: true,
+      message: 'Transaction undone and inventory state restored successfully.',
+      transaction: txn,
+      restoredItem,
+    };
   }
 
   // Categories & Brands

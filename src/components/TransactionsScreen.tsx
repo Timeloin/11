@@ -1,14 +1,34 @@
 import React, { useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowRightLeft, Sliders, ShoppingBag, Receipt, Calendar, User, Download, ChevronRight, Info } from 'lucide-react';
+import { 
+  ArrowDown, 
+  ArrowUp, 
+  ArrowRightLeft, 
+  Sliders, 
+  ShoppingBag, 
+  Receipt, 
+  Calendar, 
+  User, 
+  Download, 
+  ChevronRight, 
+  Info,
+  PlusCircle,
+  Trash2,
+  RotateCcw
+} from 'lucide-react';
 import { IStockTransaction, TransactionType } from '@/types';
 import { TransactionDetailModal } from '@/components/modals/TransactionDetailModal';
 
 interface TransactionsScreenProps {
   transactions: IStockTransaction[];
   onExport: () => void;
+  onUndoTransaction?: (transaction: IStockTransaction) => Promise<void> | void;
 }
 
-export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transactions, onExport }) => {
+export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ 
+  transactions, 
+  onExport,
+  onUndoTransaction 
+}) => {
   const [filterType, setFilterType] = useState<string>('all');
   const [selectedTxnForDetail, setSelectedTxnForDetail] = useState<IStockTransaction | null>(null);
 
@@ -19,6 +39,18 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
 
   const getBadge = (type: TransactionType) => {
     switch (type) {
+      case 'create_item':
+        return {
+          label: 'Item Added',
+          icon: PlusCircle,
+          bg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        };
+      case 'delete_item':
+        return {
+          label: 'Item Deleted',
+          icon: Trash2,
+          bg: 'bg-rose-50 text-rose-700 border-rose-200',
+        };
       case 'stock_in':
       case 'purchase':
         return {
@@ -50,13 +82,20 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
     }
   };
 
+  const getTabLabel = (tab: string) => {
+    if (tab === 'all') return 'All';
+    if (tab === 'create_item') return 'Item Added';
+    if (tab === 'delete_item') return 'Item Deleted';
+    return tab.replace('_', ' ');
+  };
+
   return (
     <div className="px-4 py-4 space-y-4 pb-24 max-w-md mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Activity & Audit</h1>
-          <p className="text-xs text-gray-500">Tap any record to inspect full details</p>
+          <p className="text-xs text-gray-500">Tap any record to inspect or undo</p>
         </div>
         <button
           onClick={onExport}
@@ -69,7 +108,7 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
 
       {/* Filter Tabs */}
       <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
-        {['all', 'stock_in', 'stock_out', 'move', 'adjust', 'sale', 'purchase'].map((tab) => (
+        {['all', 'create_item', 'delete_item', 'stock_in', 'stock_out', 'move', 'adjust', 'sale', 'purchase'].map((tab) => (
           <button
             key={tab}
             onClick={() => setFilterType(tab)}
@@ -79,7 +118,7 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
             }`}
           >
-            {tab.replace('_', ' ')}
+            {getTabLabel(tab)}
           </button>
         ))}
       </div>
@@ -105,15 +144,25 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
               <div
                 key={txn._id}
                 onClick={() => setSelectedTxnForDetail(txn)}
-                className="bg-white rounded-2xl border border-gray-100 shadow-xs p-3.5 space-y-2.5 cursor-pointer hover:border-blue-300 hover:shadow-md active:scale-98 transition-all group"
+                className={`bg-white rounded-2xl border ${
+                  txn.isUndone ? 'border-amber-200 bg-amber-50/20 opacity-80' : 'border-gray-100'
+                } shadow-xs p-3.5 space-y-2.5 cursor-pointer hover:border-blue-300 hover:shadow-md active:scale-98 transition-all group`}
               >
                 <div className="flex items-center justify-between">
-                  <span
-                    className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md border text-[11px] font-bold ${badge.bg}`}
-                  >
-                    <Icon className="w-3 h-3 stroke-[2.5]" />
-                    <span>{badge.label}</span>
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span
+                      className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md border text-[11px] font-bold ${badge.bg}`}
+                    >
+                      <Icon className="w-3 h-3 stroke-[2.5]" />
+                      <span>{badge.label}</span>
+                    </span>
+                    {txn.isUndone && (
+                      <span className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded-md border border-amber-300">
+                        <RotateCcw className="w-2.5 h-2.5" />
+                        <span>Undone</span>
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center space-x-1 text-[11px] text-gray-400 font-medium group-hover:text-blue-600 transition-colors">
                     <span>{dateFormatted}</span>
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -124,8 +173,8 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
                   {txn.items && txn.items.map((line, idx) => (
                     <div key={idx} className="flex justify-between items-center text-sm">
                       <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{line.name}</span>
-                      <span className="font-black text-gray-900">
-                        {(txn.type === 'stock_in' || txn.type === 'purchase') ? '+' : (txn.type === 'stock_out' || txn.type === 'sale') ? '-' : ''}
+                      <span className={`font-black ${txn.isUndone ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                        {(txn.type === 'stock_in' || txn.type === 'purchase' || txn.type === 'create_item') ? '+' : (txn.type === 'stock_out' || txn.type === 'sale' || txn.type === 'delete_item') ? '-' : ''}
                         {line.quantity} pcs
                       </span>
                     </div>
@@ -155,6 +204,7 @@ export const TransactionsScreen: React.FC<TransactionsScreenProps> = ({ transact
         isOpen={!!selectedTxnForDetail}
         transaction={selectedTxnForDetail}
         onClose={() => setSelectedTxnForDetail(null)}
+        onUndo={onUndoTransaction}
       />
     </div>
   );

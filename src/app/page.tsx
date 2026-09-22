@@ -174,6 +174,7 @@ export default function App() {
     const tempId = 'temp_' + Date.now();
     const parsedStock = Number(itemData.totalStock) || 0;
     const parsedCost = Number(itemData.costPrice) || 0;
+    const operatorName = session?.userName || session?.name || 'Main Admin';
 
     const optimisticItem: IItem = {
       _id: tempId,
@@ -210,13 +211,43 @@ export default function App() {
       setBrands((prev) => [...prev, itemData.brand.toLowerCase()]);
     }
 
+    // Optimistic create_item transaction
+    const optimisticCreateTxn: IStockTransaction = {
+      _id: 'temp_create_txn_' + Date.now(),
+      teamId: activeTeamId,
+      type: 'create_item',
+      referenceNo: 'TXN-' + Date.now().toString().slice(-6),
+      items: [
+        {
+          itemId: tempId,
+          sku: optimisticItem.sku,
+          name: optimisticItem.name,
+          quantity: parsedStock,
+          unitCost: parsedCost,
+          unitPrice: Number(itemData.sellingPrice) || 0,
+        },
+      ],
+      totalQuantity: parsedStock,
+      reason: 'Item Created / Added to Inventory',
+      userId: session?.userId || 'user_admin',
+      userName: operatorName,
+      snapshotData: optimisticItem,
+      createdAt: new Date().toISOString(),
+    };
+    setTransactions((prev) => [optimisticCreateTxn, ...prev.slice(0, 399)]);
+
     showToast('⚡ Item created instantly!');
 
     try {
       const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...itemData, teamId: activeTeamId }),
+        body: JSON.stringify({ 
+          ...itemData, 
+          teamId: activeTeamId,
+          userName: operatorName,
+          userId: session?.userId || 'user_admin'
+        }),
       });
       const data = await res.json();
       if (data.success && data.item) {
@@ -229,6 +260,7 @@ export default function App() {
 
   const handleDeleteItem = async (item: IItem) => {
     const activeTeamId = currentTeam?._id || session?.activeTeamId || 'team_1';
+    const operatorName = session?.userName || session?.name || 'Main Admin';
     
     // Optimistically remove from state
     setItems((prev) => prev.filter((i) => i._id !== item._id));
@@ -238,10 +270,36 @@ export default function App() {
       totalInventoryValue: Math.max(0, prev.totalInventoryValue - (Number(item.totalStock || 0) * Number(item.costPrice || 0))),
     }));
     setSelectedItemForDetail(null);
-    showToast(`🗑️ "${item.name}" deleted!`);
+
+    // Optimistic delete_item transaction
+    const optimisticDeleteTxn: IStockTransaction = {
+      _id: 'temp_del_txn_' + Date.now(),
+      teamId: activeTeamId,
+      type: 'delete_item',
+      referenceNo: 'TXN-' + Date.now().toString().slice(-6),
+      items: [
+        {
+          itemId: item._id,
+          sku: item.sku,
+          name: item.name,
+          quantity: item.totalStock || 0,
+          unitCost: item.costPrice || 0,
+          unitPrice: item.sellingPrice || 0,
+        },
+      ],
+      totalQuantity: item.totalStock || 0,
+      reason: `Item Deleted: "${item.name}"`,
+      userId: session?.userId || 'user_admin',
+      userName: operatorName,
+      snapshotData: item,
+      createdAt: new Date().toISOString(),
+    };
+    setTransactions((prev) => [optimisticDeleteTxn, ...prev.slice(0, 399)]);
+
+    showToast(`🗑️ "${item.name}" deleted! (Can be undone in Transactions)`);
 
     try {
-      await fetch(`/api/items/${item._id}?teamId=${activeTeamId}`, {
+      await fetch(`/api/items/${item._id}?teamId=${activeTeamId}&operatorName=${encodeURIComponent(operatorName)}&userId=${encodeURIComponent(session?.userId || 'user_admin')}`, {
         method: 'DELETE',
       });
     } catch (err: any) {
@@ -529,6 +587,57 @@ export default function App() {
     showToast('Stock sheet exported to CSV!');
   };
 
+  const handleUndoTransaction = async (txn: IStockTransaction) => {
+    const operatorName = session?.userName || session?.name || 'Main Admin';
+    const userId = session?.userId || 'user_admin';
+
+    try {
+      const res = await fetch('/api/transactions/undo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactionId: txn._id,
+          operatorName,
+          userId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to undo transaction');
+      }
+
+      // Mark transaction as undone in state
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t._id === txn._id
+            ? { ...t, isUndone: true, undoneAt: new Date().toISOString(), undoneBy: operatorName }
+            : t
+        )
+      );
+
+      // If an item was restored from delete_item
+      if (data.restoredItem) {
+        setItems((prev) => {
+          const exists = prev.some((i) => i._id === data.restoredItem._id);
+          if (exists) {
+            return prev.map((i) => (i._id === data.restoredItem._id ? data.restoredItem : i));
+          } else {
+            return [data.restoredItem, ...prev];
+          }
+        });
+      }
+
+      showToast('↩️ Transaction undone and restored successfully!');
+      // Sync fresh data from server
+      await loadData();
+    } catch (err: any) {
+      console.error('Undo error:', err);
+      showToast(`❌ ${err.message || 'Error undoing transaction'}`);
+      throw err;
+    }
+  };
+
   const openStockModal = (type: TransactionType, item?: IItem | null) => {
     setStockModalConfig({
       isOpen: true,
@@ -643,7 +752,11 @@ export default function App() {
           )}
 
           {activeTab === 'transactions' && (
-            <TransactionsScreen transactions={transactions} onExport={handleExportCSV} />
+            <TransactionsScreen
+              transactions={transactions}
+              onExport={handleExportCSV}
+              onUndoTransaction={handleUndoTransaction}
+            />
           )}
 
           {activeTab === 'settings' && (
