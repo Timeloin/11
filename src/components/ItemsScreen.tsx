@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Search, Plus, AlertTriangle, ArrowDown, ArrowUp, Barcode, ChevronRight, PackageCheck } from 'lucide-react';
-import { IItem } from '@/types';
+import { IItem, UserSession } from '@/types';
+import { hasPermission } from '@/lib/permissions';
 
 interface ItemsScreenProps {
+  session?: UserSession | null;
   items: IItem[];
   categories: string[];
   brands: string[];
@@ -15,6 +17,7 @@ interface ItemsScreenProps {
 }
 
 export const ItemsScreen: React.FC<ItemsScreenProps> = ({
+  session,
   items,
   categories,
   brands,
@@ -59,13 +62,15 @@ export const ItemsScreen: React.FC<ItemsScreenProps> = ({
             className="w-full text-xs sm:text-sm text-gray-800 placeholder-gray-400 bg-transparent focus:outline-none"
           />
         </div>
-        <button
-          onClick={onOpenNewItem}
-          className="p-3 bg-[#4965fa] hover:bg-blue-600 text-white rounded-2xl shadow-sm transition-transform active:scale-95 shrink-0 flex items-center justify-center"
-          title="Add New Item"
-        >
-          <Plus className="w-5 h-5" />
-        </button>
+        {hasPermission(session, 'canCreateItem') && (
+          <button
+            onClick={onOpenNewItem}
+            className="p-3 bg-[#4965fa] hover:bg-blue-600 text-white rounded-2xl shadow-sm transition-transform active:scale-95 shrink-0 flex items-center justify-center"
+            title="Add New Item"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Category & Shortage Filter Pills */}
@@ -158,7 +163,9 @@ export const ItemsScreen: React.FC<ItemsScreenProps> = ({
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs">
                     <div className="flex items-center space-x-2">
                       <span className="text-blue-600 font-extrabold text-sm">₹{item.sellingPrice}</span>
-                      <span className="text-gray-400 text-[11px]">Cost: ₹{item.costPrice}</span>
+                      {hasPermission(session, 'canViewCostPrice') && (
+                        <span className="text-gray-400 text-[11px]">Cost: ₹{item.costPrice}</span>
+                      )}
                     </div>
                     <div className="text-right">
                       <span className="text-sm font-black text-gray-900">
@@ -174,26 +181,30 @@ export const ItemsScreen: React.FC<ItemsScreenProps> = ({
                     {item.stockByLocation.map((loc) => loc.locationName + ': ' + loc.quantity).join(', ')}
                   </div>
                   <div className="flex items-center space-x-1.5 shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStockInItem(item);
-                      }}
-                      className="flex items-center space-x-1 px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors active:scale-95"
-                    >
-                      <ArrowDown className="w-3 h-3" />
-                      <span>In</span>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStockOutItem(item);
-                      }}
-                      className="flex items-center space-x-1 px-2.5 py-1 bg-red-50 text-red-700 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors active:scale-95"
-                    >
-                      <ArrowUp className="w-3 h-3" />
-                      <span>Out</span>
-                    </button>
+                    {hasPermission(session, 'canStockIn') && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onStockInItem(item);
+                        }}
+                        className="flex items-center space-x-1 px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors active:scale-95"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                        <span>In</span>
+                      </button>
+                    )}
+                    {hasPermission(session, 'canStockOut') && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onStockOutItem(item);
+                        }}
+                        className="flex items-center space-x-1 px-2.5 py-1 bg-red-50 text-red-700 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors active:scale-95"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                        <span>Out</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

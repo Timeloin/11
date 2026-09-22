@@ -18,6 +18,7 @@ export interface CustomPermissions {
   canExportData?: boolean;
   canViewAuditLogs?: boolean;
   canViewReports?: boolean;
+  isReadOnly?: boolean;
 }
 
 export interface UserSession {

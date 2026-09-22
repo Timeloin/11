@@ -114,6 +114,28 @@ export class InventoryStore {
     return 'team_1';
   }
 
+  static isMainAdmin(email?: string): boolean {
+    if (!email) return false;
+    const clean = email.trim().toLowerCase();
+    const envAdminEmail = (process.env.SUPER_ADMIN_EMAIL || SUPER_ADMIN_EMAIL || '').toLowerCase().trim();
+    return !!envAdminEmail && clean === envAdminEmail;
+  }
+
+  static async findMemberByEmail(email: string): Promise<ITeamMember | null> {
+    const clean = email.trim().toLowerCase();
+    if (process.env.MONGODB_URI) {
+      try {
+        await connectDB();
+        const mem = await TeamMember.findOne({ email: clean }).lean();
+        if (mem) return JSON.parse(JSON.stringify(mem));
+      } catch (e) {
+        console.error('findMemberByEmail error:', e);
+      }
+    }
+    const demo = demoMembers.find(m => m.email.toLowerCase() === clean);
+    return demo || null;
+  }
+
   // Authentication: Exactly 1 Main Admin (from Vercel env) + Shared Staff Members
   static async authenticateUser(email: string, pass: string): Promise<{
     success: boolean;

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Tag, Barcode, MapPin, ArrowDown, ArrowUp, ArrowRightLeft, Sliders, AlertTriangle, CheckCircle2, FileText, Trash2, Edit3, Check, Save } from 'lucide-react';
-import { IItem, ILocation } from '@/types';
+import { IItem, ILocation, UserSession } from '@/types';
+import { hasPermission } from '@/lib/permissions';
 
 interface ItemDetailModalProps {
+  session?: UserSession | null;
   isOpen: boolean;
   item: IItem | null;
   locations: ILocation[];
@@ -16,6 +18,7 @@ interface ItemDetailModalProps {
 }
 
 export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
+  session,
   isOpen,
   item,
   locations,
@@ -130,7 +133,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
             )}
           </div>
           <div className="flex items-center space-x-1">
-            {!isEditing && onUpdateItem && (
+            {!isEditing && onUpdateItem && hasPermission(session, 'canEditItem') && (
               <button
                 onClick={() => setIsEditing(true)}
                 className="p-1.5 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
@@ -139,7 +142,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                 <Edit3 className="w-4 h-4" />
               </button>
             )}
-            {!isEditing && onDeleteItem && (
+            {!isEditing && onDeleteItem && hasPermission(session, 'canDeleteItem') && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 className="p-1.5 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -361,19 +364,23 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Pricing & Margin
               </h2>
-              <div className="grid grid-cols-3 gap-2">
+              <div className={`grid ${hasPermission(session, 'canViewCostPrice') ? 'grid-cols-3' : 'grid-cols-1'} gap-2`}>
                 <div className="bg-gray-50 p-2.5 rounded-xl">
                   <div className="text-[11px] text-gray-500 font-medium">Selling Price</div>
                   <div className="text-base font-black text-blue-600 mt-0.5">₹{item.sellingPrice}</div>
                 </div>
-                <div className="bg-gray-50 p-2.5 rounded-xl">
-                  <div className="text-[11px] text-gray-500 font-medium">Cost Price</div>
-                  <div className="text-base font-bold text-gray-800 mt-0.5">₹{item.costPrice}</div>
-                </div>
-                <div className="bg-gray-50 p-2.5 rounded-xl">
-                  <div className="text-[11px] text-gray-500 font-medium">Profit Margin</div>
-                  <div className="text-base font-bold text-emerald-600 mt-0.5">+{margin}%</div>
-                </div>
+                {hasPermission(session, 'canViewCostPrice') && (
+                  <>
+                    <div className="bg-gray-50 p-2.5 rounded-xl">
+                      <div className="text-[11px] text-gray-500 font-medium">Cost Price</div>
+                      <div className="text-base font-bold text-gray-800 mt-0.5">₹{item.costPrice}</div>
+                    </div>
+                    <div className="bg-gray-50 p-2.5 rounded-xl">
+                      <div className="text-[11px] text-gray-500 font-medium">Profit Margin</div>
+                      <div className="text-base font-bold text-emerald-600 mt-0.5">+{margin}%</div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -435,73 +442,87 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
 
             {/* Action Buttons */}
             <div className="pt-2 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    onStockIn(item);
-                    handleClose();
-                  }}
-                  className="flex items-center justify-center space-x-1.5 py-3 bg-blue-50 text-blue-700 font-bold text-xs rounded-xl hover:bg-blue-100 active:scale-98 transition-all"
-                >
-                  <ArrowDown className="w-4 h-4" />
-                  <span>Stock In</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onStockOut(item);
-                    handleClose();
-                  }}
-                  className="flex items-center justify-center space-x-1.5 py-3 bg-red-50 text-red-700 font-bold text-xs rounded-xl hover:bg-red-100 active:scale-98 transition-all"
-                >
-                  <ArrowUp className="w-4 h-4" />
-                  <span>Stock Out</span>
-                </button>
-              </div>
+              {(hasPermission(session, 'canStockIn') || hasPermission(session, 'canStockOut')) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {hasPermission(session, 'canStockIn') && (
+                    <button
+                      onClick={() => {
+                        onStockIn(item);
+                        handleClose();
+                      }}
+                      className="flex items-center justify-center space-x-1.5 py-3 bg-blue-50 text-blue-700 font-bold text-xs rounded-xl hover:bg-blue-100 active:scale-98 transition-all"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                      <span>Stock In</span>
+                    </button>
+                  )}
+                  {hasPermission(session, 'canStockOut') && (
+                    <button
+                      onClick={() => {
+                        onStockOut(item);
+                        handleClose();
+                      }}
+                      className="flex items-center justify-center space-x-1.5 py-3 bg-red-50 text-red-700 font-bold text-xs rounded-xl hover:bg-red-100 active:scale-98 transition-all"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                      <span>Stock Out</span>
+                    </button>
+                  )}
+                </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    onMoveStock(item);
-                    handleClose();
-                  }}
-                  className="flex items-center justify-center space-x-1.5 py-2.5 bg-amber-50 text-amber-800 font-semibold text-xs rounded-xl hover:bg-amber-100 active:scale-98 transition-all"
-                >
-                  <ArrowRightLeft className="w-3.5 h-3.5" />
-                  <span>Move Stock</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onAdjustStock(item);
-                    handleClose();
-                  }}
-                  className="flex items-center justify-center space-x-1.5 py-2.5 bg-teal-50 text-teal-800 font-semibold text-xs rounded-xl hover:bg-teal-100 active:scale-98 transition-all"
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Adjust Stock</span>
-                </button>
-              </div>
+              {(hasPermission(session, 'canMoveStock') || hasPermission(session, 'canAdjustStock')) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {hasPermission(session, 'canMoveStock') && (
+                    <button
+                      onClick={() => {
+                        onMoveStock(item);
+                        handleClose();
+                      }}
+                      className="flex items-center justify-center space-x-1.5 py-2.5 bg-amber-50 text-amber-800 font-semibold text-xs rounded-xl hover:bg-amber-100 active:scale-98 transition-all"
+                    >
+                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                      <span>Move Stock</span>
+                    </button>
+                  )}
+                  {hasPermission(session, 'canAdjustStock') && (
+                    <button
+                      onClick={() => {
+                        onAdjustStock(item);
+                        handleClose();
+                      }}
+                      className="flex items-center justify-center space-x-1.5 py-2.5 bg-teal-50 text-teal-800 font-semibold text-xs rounded-xl hover:bg-teal-100 active:scale-98 transition-all"
+                    >
+                      <Sliders className="w-3.5 h-3.5" />
+                      <span>Adjust Stock</span>
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Edit & Delete Actions */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                {onUpdateItem && (
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="flex items-center justify-center space-x-1.5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs rounded-xl active:scale-98 transition-all"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>Edit Item</span>
-                  </button>
-                )}
-                {onDeleteItem && !showDeleteConfirm && (
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="flex items-center justify-center space-x-1.5 py-2.5 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-600 font-medium text-xs rounded-xl border border-gray-100 hover:border-red-200 active:scale-98 transition-all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete</span>
-                  </button>
-                )}
-              </div>
+              {(hasPermission(session, 'canEditItem') || hasPermission(session, 'canDeleteItem')) && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {onUpdateItem && hasPermission(session, 'canEditItem') && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="flex items-center justify-center space-x-1.5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs rounded-xl active:scale-98 transition-all"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Edit Item</span>
+                    </button>
+                  )}
+                  {onDeleteItem && !showDeleteConfirm && hasPermission(session, 'canDeleteItem') && (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="flex items-center justify-center space-x-1.5 py-2.5 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-600 font-medium text-xs rounded-xl border border-gray-100 hover:border-red-200 active:scale-98 transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

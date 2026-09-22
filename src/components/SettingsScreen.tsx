@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ITeam, ITeamMember, ILocation, UserSession } from '@/types';
 import { EditMemberModal } from '@/components/modals/EditMemberModal';
+import { hasPermission } from '@/lib/permissions';
 
 interface SettingsScreenProps {
   team: ITeam | null;
@@ -89,6 +90,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [installSuccess, setInstallSuccess] = useState(false);
 
   const isAdmin = session?.role === 'admin';
+  const canManageStaff = isAdmin || hasPermission(session, 'canManageMembers');
 
   useEffect(() => {
     if (session?.userName) {
@@ -468,7 +470,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <Users className="w-5 h-5 text-blue-600" />
             <h3 className="font-bold text-gray-900 text-sm">Staff & Members ({members.length})</h3>
           </div>
-          {isAdmin && (
+          {canManageStaff && (
             <button
               onClick={onOpenInvite}
               className="text-xs font-bold text-blue-600 hover:underline flex items-center space-x-1 bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors"
@@ -481,47 +483,75 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         {members.length === 0 ? (
           <div className="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-xl">
-            No staff members added yet. {isAdmin && 'Click "+ Add Member" to invite staff.'}
+            No staff members added yet. {canManageStaff && 'Click "+ Add Member" to invite staff.'}
           </div>
         ) : (
           <div className="space-y-2">
-            {members.map((m) => (
-              <div
-                key={m._id}
-                className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl text-xs"
-              >
-                <div className="flex-1 min-w-0 pr-2">
-                  <div className="flex items-center space-x-1.5">
-                    <span className="font-bold text-gray-900 truncate">{m.name}</span>
-                    <span className="px-1.5 py-0.2 rounded uppercase font-bold text-[9px] bg-blue-100 text-blue-800 shrink-0">
-                      {m.role}
-                    </span>
-                  </div>
-                  <div className="text-gray-400 text-[11px] truncate">{m.email}</div>
-                </div>
+            {members.map((m) => {
+              const p = m.customPermissions;
+              const isRo = p?.isReadOnly || m.role === 'viewer';
+              return (
+                <div
+                  key={m._id}
+                  className="p-2.5 bg-gray-50 rounded-xl text-xs space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0 pr-2">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-bold text-gray-900 truncate">{m.name}</span>
+                        {isRo ? (
+                          <span className="px-1.5 py-0.5 rounded uppercase font-bold text-[9px] bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                            Read Only
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded uppercase font-bold text-[9px] bg-blue-100 text-blue-800 shrink-0">
+                            Staff
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-gray-400 text-[11px] truncate">{m.email}</div>
+                    </div>
 
-                {isAdmin && (
-                  <div className="flex items-center space-x-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setEditingMember(m)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                      title="Edit Member"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeletingMember(m)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                      title="Delete Member"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {canManageStaff && (
+                      <div className="flex items-center space-x-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditingMember(m)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Edit Member"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingMember(m)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          title="Delete Member"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {/* Permission Pills */}
+                  {!isRo && p && (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {p.canCreateItem && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">+Item</span>}
+                      {p.canEditItem && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">Edit</span>}
+                      {p.canDeleteItem && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-50 text-red-700 border border-red-100">Delete</span>}
+                      {p.canStockIn && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">Stock In</span>}
+                      {p.canStockOut && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-50 text-orange-700 border border-orange-100">Stock Out</span>}
+                      {p.canCreateSale && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-50 text-purple-700 border border-purple-100">Sales</span>}
+                      {p.canCreatePurchase && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-teal-50 text-teal-700 border border-teal-100">Purchase</span>}
+                      {p.canAdjustStock && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-50 text-amber-700 border border-amber-100">Adjust</span>}
+                      {p.canMoveStock && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-cyan-50 text-cyan-700 border border-cyan-100">Move</span>}
+                      {p.canManageMembers && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">Add Staff</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

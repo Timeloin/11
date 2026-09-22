@@ -17,9 +17,11 @@ import {
   ChevronRight,
   Barcode
 } from 'lucide-react';
-import { IItem, IStockTransaction } from '@/types';
+import { IItem, IStockTransaction, UserSession } from '@/types';
+import { hasPermission } from '@/lib/permissions';
 
 interface HomeScreenProps {
+  session?: UserSession | null;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onOpenScanner: () => void;
@@ -38,6 +40,7 @@ interface HomeScreenProps {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
+  session,
   searchQuery,
   onSearchChange,
   onOpenScanner,
@@ -77,82 +80,97 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Group: Items */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
-        <h2 className="text-base font-bold text-gray-900">Items</h2>
-        <button
-          onClick={onOpenNewItem}
-          className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-              <Barcode className="w-4 h-4" />
+      {hasPermission(session, 'canCreateItem') && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
+          <h2 className="text-base font-bold text-gray-900">Items</h2>
+          <button
+            onClick={onOpenNewItem}
+            className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                <Barcode className="w-4 h-4" />
+              </div>
+              <span className="text-sm font-semibold text-gray-900">Add Item</span>
             </div>
-            <span className="text-sm font-semibold text-gray-900">Add Item</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 group-hover:translate-x-0.5 transition-all" />
-        </button>
-      </div>
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 group-hover:translate-x-0.5 transition-all" />
+          </button>
+        </div>
+      )}
 
       {/* Group: Transactions matching Screenshots 2 & 3 */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-1">
-        <h2 className="text-base font-bold text-gray-900 mb-2">Transactions</h2>
+      {(hasPermission(session, 'canStockIn') ||
+        hasPermission(session, 'canStockOut') ||
+        hasPermission(session, 'canMoveStock') ||
+        hasPermission(session, 'canAdjustStock')) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-1">
+          <h2 className="text-base font-bold text-gray-900 mb-2">Transactions</h2>
 
-        {/* Stock In */}
-        <button
-          onClick={onOpenStockIn}
-          className="w-full flex items-center justify-between py-2.5 text-left border-b border-gray-50 group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-7 h-7 rounded-md bg-blue-50 flex items-center justify-center text-blue-600">
-              <ArrowDown className="w-4 h-4 text-blue-600 stroke-[2.5]" />
-            </div>
-            <span className="text-sm font-semibold text-gray-900">Stock In</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
+          {/* Stock In */}
+          {hasPermission(session, 'canStockIn') && (
+            <button
+              onClick={onOpenStockIn}
+              className="w-full flex items-center justify-between py-2.5 text-left border-b border-gray-50 group active:scale-99 transition-all"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-7 h-7 rounded-md bg-blue-50 flex items-center justify-center text-blue-600">
+                  <ArrowDown className="w-4 h-4 text-blue-600 stroke-[2.5]" />
+                </div>
+                <span className="text-sm font-semibold text-gray-900">Stock In</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+            </button>
+          )}
 
-        {/* Stock Out */}
-        <button
-          onClick={onOpenStockOut}
-          className="w-full flex items-center justify-between py-2.5 text-left border-b border-gray-50 group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-7 h-7 rounded-md bg-red-50 flex items-center justify-center text-red-500">
-              <ArrowUp className="w-4 h-4 text-red-500 stroke-[2.5]" />
-            </div>
-            <span className="text-sm font-semibold text-gray-900">Stock Out</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
+          {/* Stock Out */}
+          {hasPermission(session, 'canStockOut') && (
+            <button
+              onClick={onOpenStockOut}
+              className="w-full flex items-center justify-between py-2.5 text-left border-b border-gray-50 group active:scale-99 transition-all"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-7 h-7 rounded-md bg-red-50 flex items-center justify-center text-red-500">
+                  <ArrowUp className="w-4 h-4 text-red-500 stroke-[2.5]" />
+                </div>
+                <span className="text-sm font-semibold text-gray-900">Stock Out</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+            </button>
+          )}
 
-        {/* Move Stock */}
-        <button
-          onClick={onOpenMoveStock}
-          className="w-full flex items-center justify-between py-2.5 text-left border-b border-gray-50 group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-7 h-7 rounded-md bg-amber-50 flex items-center justify-center text-amber-500">
-              <ArrowRightLeft className="w-4 h-4 text-amber-500 stroke-[2.5]" />
-            </div>
-            <span className="text-sm font-semibold text-gray-900">Move Stock</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
+          {/* Move Stock */}
+          {hasPermission(session, 'canMoveStock') && (
+            <button
+              onClick={onOpenMoveStock}
+              className="w-full flex items-center justify-between py-2.5 text-left border-b border-gray-50 group active:scale-99 transition-all"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-7 h-7 rounded-md bg-amber-50 flex items-center justify-center text-amber-500">
+                  <ArrowRightLeft className="w-4 h-4 text-amber-500 stroke-[2.5]" />
+                </div>
+                <span className="text-sm font-semibold text-gray-900">Move Stock</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+            </button>
+          )}
 
-        {/* Adjust Stock */}
-        <button
-          onClick={onOpenAdjustStock}
-          className="w-full flex items-center justify-between py-2.5 text-left group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-7 h-7 rounded-md bg-teal-50 flex items-center justify-center text-teal-600">
-              <Sliders className="w-4 h-4 text-teal-600 stroke-[2.5]" />
-            </div>
-            <span className="text-sm font-semibold text-gray-900">Adjust Stock</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
-      </div>
+          {/* Adjust Stock */}
+          {hasPermission(session, 'canAdjustStock') && (
+            <button
+              onClick={onOpenAdjustStock}
+              className="w-full flex items-center justify-between py-2.5 text-left group active:scale-99 transition-all"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-7 h-7 rounded-md bg-teal-50 flex items-center justify-center text-teal-600">
+                  <Sliders className="w-4 h-4 text-teal-600 stroke-[2.5]" />
+                </div>
+                <span className="text-sm font-semibold text-gray-900">Adjust Stock</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Group: Low Stock Alerts */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
@@ -172,38 +190,42 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Group: Inventory Count */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
-        <h2 className="text-base font-bold text-gray-900">Inventory Count</h2>
-        <button
-          onClick={onOpenInventoryCount}
-          className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
-              <Binary className="w-4 h-4" />
+      {(hasPermission(session, 'canAdjustStock') || hasPermission(session, 'canInventoryCount')) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
+          <h2 className="text-base font-bold text-gray-900">Inventory Count</h2>
+          <button
+            onClick={onOpenInventoryCount}
+            className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
+                <Binary className="w-4 h-4" />
+              </div>
+              <span className="text-sm font-semibold text-gray-900">Start Inventory Count</span>
             </div>
-            <span className="text-sm font-semibold text-gray-900">Start Inventory Count</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
-      </div>
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+          </button>
+        </div>
+      )}
 
       {/* Group: Staff Members */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
-        <h2 className="text-base font-bold text-gray-900">Staff Members</h2>
-        <button
-          onClick={onOpenInviteMembers}
-          className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-              <UserPlus className="w-4 h-4" />
+      {(session?.role === 'admin' || hasPermission(session, 'canManageMembers')) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
+          <h2 className="text-base font-bold text-gray-900">Staff Members</h2>
+          <button
+            onClick={onOpenInviteMembers}
+            className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                <UserPlus className="w-4 h-4" />
+              </div>
+              <span className="text-sm font-semibold text-gray-900">Add Staff Member</span>
             </div>
-            <span className="text-sm font-semibold text-gray-900">Add Staff Member</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
-      </div>
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+          </button>
+        </div>
+      )}
 
       {/* Group: Past Quantity */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
@@ -240,34 +262,40 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Group: Purchases & Sales */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-1">
-        <h2 className="text-base font-bold text-gray-900 mb-2">Purchases & Sales</h2>
-        <button
-          onClick={onOpenPurchases}
-          className="w-full flex items-center justify-between py-2.5 text-left border-b border-gray-50 group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-7 h-7 rounded-md bg-blue-50 flex items-center justify-center text-blue-600">
-              <ShoppingBag className="w-4 h-4 text-blue-600 stroke-[2.2]" />
-            </div>
-            <span className="text-sm font-semibold text-gray-900">Purchases</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
+      {(hasPermission(session, 'canCreatePurchase') || hasPermission(session, 'canCreateSale')) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-1">
+          <h2 className="text-base font-bold text-gray-900 mb-2">Purchases & Sales</h2>
+          {hasPermission(session, 'canCreatePurchase') && (
+            <button
+              onClick={onOpenPurchases}
+              className="w-full flex items-center justify-between py-2.5 text-left border-b border-gray-50 group active:scale-99 transition-all"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-7 h-7 rounded-md bg-blue-50 flex items-center justify-center text-blue-600">
+                  <ShoppingBag className="w-4 h-4 text-blue-600 stroke-[2.2]" />
+                </div>
+                <span className="text-sm font-semibold text-gray-900">Purchases</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+            </button>
+          )}
 
-        <button
-          onClick={onOpenSales}
-          className="w-full flex items-center justify-between py-2.5 text-left group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-7 h-7 rounded-md bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <Receipt className="w-4 h-4 text-emerald-600 stroke-[2.2]" />
-            </div>
-            <span className="text-sm font-semibold text-gray-900">Sales</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
-      </div>
+          {hasPermission(session, 'canCreateSale') && (
+            <button
+              onClick={onOpenSales}
+              className="w-full flex items-center justify-between py-2.5 text-left group active:scale-99 transition-all"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-7 h-7 rounded-md bg-emerald-50 flex items-center justify-center text-emerald-600">
+                  <Receipt className="w-4 h-4 text-emerald-600 stroke-[2.2]" />
+                </div>
+                <span className="text-sm font-semibold text-gray-900">Sales</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

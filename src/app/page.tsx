@@ -17,6 +17,7 @@ import { ShortagesModal } from '@/components/modals/ShortagesModal';
 import { CsvImportModal } from '@/components/modals/CsvImportModal';
 import { LoginScreen } from '@/components/LoginScreen';
 import { IItem, ILocation, IStockTransaction, ITeam, ITeamMember, TransactionType, UserSession } from '@/types';
+import { hasPermission } from '@/lib/permissions';
 
 export default function App() {
   const [session, setSession] = useState<UserSession | null>(null);
@@ -88,13 +89,13 @@ export default function App() {
     } catch (e) {}
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setSession(null);
     try {
       localStorage.removeItem('inventory_session');
       localStorage.removeItem('inventory_token');
     } catch (e) {}
-  };
+  }, []);
 
   const [toast, setToast] = useState<string | null>(null);
 
@@ -110,9 +111,34 @@ export default function App() {
     if (!session) return;
     try {
       const targetTeamId = currentTeam?._id || session.activeTeamId || 'team_1';
-      const syncRes = await fetch('/api/sync?teamId=' + targetTeamId).then((r) => r.json());
+      const syncRes = await fetch(
+        `/api/sync?teamId=${targetTeamId}&email=${encodeURIComponent(session.email || '')}`
+      ).then((r) => r.json());
 
       if (syncRes.success) {
+        // Automatically log out if member account has been deleted by the admin
+        if (syncRes.sessionRevoked) {
+          handleLogout();
+          alert('⚠️ Your staff account has been removed by the admin. You have been logged out.');
+          return;
+        }
+
+        // Real-time synchronization of member permissions if edited by admin
+        if (syncRes.currentMember && syncRes.currentMember.customPermissions) {
+          const updatedPerms = syncRes.currentMember.customPermissions;
+          if (JSON.stringify(updatedPerms) !== JSON.stringify(session.permissions)) {
+            const updatedSession = {
+              ...session,
+              permissions: updatedPerms,
+              role: syncRes.currentMember.role,
+            };
+            setSession(updatedSession);
+            try {
+              localStorage.setItem('inventory_session', JSON.stringify(updatedSession));
+            } catch (e) {}
+          }
+        }
+
         if (syncRes.teams?.length > 0) {
           setTeams(syncRes.teams);
           const matched = syncRes.teams.find((t: ITeam) => t._id === targetTeamId) || syncRes.teams[0];
@@ -129,11 +155,16 @@ export default function App() {
     } catch (e) {
       console.error('Error syncing shop data:', e);
     }
-  }, [session, currentTeam]);
+  }, [session, currentTeam, handleLogout]);
 
   useEffect(() => {
     if (session) {
       loadData();
+      // Polling heartbeat every 10 seconds to detect member removal or permission edits in real time
+      const timer = setInterval(() => {
+        loadData();
+      }, 10000);
+      return () => clearInterval(timer);
     }
   }, [session, loadData]);
 
@@ -470,6 +501,10 @@ export default function App() {
   };
 
   const handleExportCSV = () => {
+    if (session?.role !== 'admin' && !hasPermission(session, 'canExportData')) {
+      showToast('❌ You do not have permission to export data.');
+      return;
+    }
     const headers = ['Name', 'SKU', 'Category', 'Brand', 'Cost Price', 'Selling Price', 'Total Stock', 'Safety Stock'];
     const rows = items.map((i) => [
       `"${(i.name || '').replace(/"/g, '""')}"`,
@@ -564,6 +599,7 @@ export default function App() {
         <main className="flex-1 bg-[#f3f4f8]">
           {activeTab === 'home' && (
             <HomeScreen
+              session={session}
               searchQuery={searchQuery}
               onSearchChange={(q) => {
                 setSearchQuery(q);
@@ -590,6 +626,7 @@ export default function App() {
 
           {activeTab === 'items' && (
             <ItemsScreen
+              session={session}
               items={items}
               categories={categories}
               brands={brands}
@@ -634,6 +671,7 @@ export default function App() {
         {/* Modals */}
         <ItemDetailModal
           isOpen={!!selectedItemForDetail}
+          session={session}
           item={selectedItemForDetail}
           locations={locations}
           onClose={() => setSelectedItemForDetail(null)}

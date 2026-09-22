@@ -1,136 +1,29 @@
-import { Role, CustomPermissions } from '@/types';
-
-export const DEFAULT_ROLE_PERMISSIONS: Record<Role, CustomPermissions> = {
-  superadmin: {
-    canCreateItem: true,
-    canEditItem: true,
-    canDeleteItem: true,
-    canViewCostPrice: true,
-    canStockIn: true,
-    canStockOut: true,
-    canMoveStock: true,
-    canAdjustStock: true,
-    canCreatePurchase: true,
-    canCreateSale: true,
-    canCreateReturn: true,
-    canInventoryCount: true,
-    canManageMembers: true,
-    canManageLocations: true,
-    canExportData: true,
-    canViewAuditLogs: true,
-    canViewReports: true,
-  },
-  admin: {
-    canCreateItem: true,
-    canEditItem: true,
-    canDeleteItem: true,
-    canViewCostPrice: true,
-    canStockIn: true,
-    canStockOut: true,
-    canMoveStock: true,
-    canAdjustStock: true,
-    canCreatePurchase: true,
-    canCreateSale: true,
-    canCreateReturn: true,
-    canInventoryCount: true,
-    canManageMembers: true,
-    canManageLocations: true,
-    canExportData: true,
-    canViewAuditLogs: true,
-    canViewReports: true,
-  },
-  manager: {
-    canCreateItem: true,
-    canEditItem: true,
-    canDeleteItem: false,
-    canViewCostPrice: true,
-    canStockIn: true,
-    canStockOut: true,
-    canMoveStock: true,
-    canAdjustStock: true,
-    canCreatePurchase: true,
-    canCreateSale: true,
-    canCreateReturn: true,
-    canInventoryCount: true,
-    canManageMembers: false,
-    canManageLocations: true,
-    canExportData: true,
-    canViewAuditLogs: false,
-    canViewReports: true,
-  },
-  sales: {
-    canCreateItem: false,
-    canEditItem: false,
-    canDeleteItem: false,
-    canViewCostPrice: false,
-    canStockIn: false,
-    canStockOut: true,
-    canMoveStock: false,
-    canAdjustStock: false,
-    canCreatePurchase: false,
-    canCreateSale: true,
-    canCreateReturn: true,
-    canInventoryCount: false,
-    canManageMembers: false,
-    canManageLocations: false,
-    canExportData: false,
-    canViewAuditLogs: false,
-    canViewReports: false,
-  },
-  inventory: {
-    canCreateItem: true,
-    canEditItem: true,
-    canDeleteItem: false,
-    canViewCostPrice: false,
-    canStockIn: true,
-    canStockOut: true,
-    canMoveStock: true,
-    canAdjustStock: true,
-    canCreatePurchase: false,
-    canCreateSale: false,
-    canCreateReturn: false,
-    canInventoryCount: true,
-    canManageMembers: false,
-    canManageLocations: false,
-    canExportData: false,
-    canViewAuditLogs: false,
-    canViewReports: false,
-  },
-  viewer: {
-    canCreateItem: false,
-    canEditItem: false,
-    canDeleteItem: false,
-    canViewCostPrice: false,
-    canStockIn: false,
-    canStockOut: false,
-    canMoveStock: false,
-    canAdjustStock: false,
-    canCreatePurchase: false,
-    canCreateSale: false,
-    canCreateReturn: false,
-    canInventoryCount: false,
-    canManageMembers: false,
-    canManageLocations: false,
-    canExportData: false,
-    canViewAuditLogs: false,
-    canViewReports: false,
-  },
-};
-
-export function resolvePermissions(role: Role, customOverrides?: CustomPermissions): CustomPermissions {
-  const defaults = DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS.viewer;
-  if (!customOverrides) return defaults;
-  return {
-    ...defaults,
-    ...customOverrides,
-  };
-}
+import { CustomPermissions, UserSession } from '@/types';
 
 export function hasPermission(
-  role: Role = 'viewer',
-  permissionKey: keyof CustomPermissions,
-  customOverrides?: CustomPermissions
+  session: UserSession | null | undefined,
+  permission: keyof CustomPermissions
 ): boolean {
-  const effective = resolvePermissions(role, customOverrides);
-  return !!effective[permissionKey];
+  if (!session) return false;
+  // Main Admin always has full permissions
+  if (session.role === 'admin' || session.isSuperAdmin) return true;
+
+  const perms = session.permissions;
+  if (!perms) return false;
+
+  // If member is marked Read-Only, block all write actions
+  if (perms.isReadOnly) {
+    if (permission === 'isReadOnly' || permission === 'canViewCostPrice' || permission === 'canExportData') {
+      return !!perms[permission];
+    }
+    return false;
+  }
+
+  return !!perms[permission];
+}
+
+export function isMemberReadOnly(session: UserSession | null | undefined): boolean {
+  if (!session) return true;
+  if (session.role === 'admin' || session.isSuperAdmin) return false;
+  return !!session.permissions?.isReadOnly;
 }
