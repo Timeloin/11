@@ -270,17 +270,13 @@ export const ItemsScreen: React.FC<ItemsScreenProps> = ({
                     </span>
                   </div>
 
-                  {/* Overlapping Circles & Stats */}
-                  <div className="flex items-center justify-between pt-1">
-                    {/* Overlapping Circular Discs */}
-                    <div className="flex -space-x-4 items-center">
-                      <div className="w-9 h-9 rounded-full bg-gray-200 border-2 border-white shadow-2xs" />
-                      <div className="w-9 h-9 rounded-full bg-gray-300 border-2 border-white shadow-2xs" />
-                      <div className="w-9 h-9 rounded-full bg-gray-400 border-2 border-white shadow-2xs" />
+                  {/* Stats: Item count & Total Quantity */}
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="text-xs text-gray-400 font-medium">
+                      Tap to view items
                     </div>
 
-                    {/* Stats: Item count & Total Quantity */}
-                    <div className="flex items-center space-x-8 pr-2">
+                    <div className="flex items-center space-x-6 pr-1">
                       <div className="text-center">
                         <div className="text-base font-black text-gray-900 leading-tight">
                           {bundle.items.length}
@@ -339,23 +335,16 @@ export const ItemsScreen: React.FC<ItemsScreenProps> = ({
               onClick={() => onSelectItem(item)}
               className="flex items-center justify-between p-3.5 hover:bg-gray-50/60 cursor-pointer transition-colors active:bg-gray-100/60"
             >
-              <div className="flex items-center space-x-3.5 min-w-0">
-                {/* Rounded Placeholder square as in reference */}
-                <div className="w-12 h-12 rounded-xl bg-gray-200/90 shrink-0 flex items-center justify-center">
-                  <div className="w-4 h-4 rounded-sm bg-gray-300/80" />
+              <div className="min-w-0 flex-1 pr-3">
+                <div className="text-sm font-semibold text-gray-900 truncate">
+                  {item.name}
                 </div>
-
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-gray-900 truncate">
-                    {item.name}
-                  </div>
-                  <div className="text-xs text-gray-400 flex items-center space-x-1.5 truncate mt-0.5">
-                    <span>₹{item.costPrice?.toFixed(2) || '0.00'}</span>
-                    <span className="text-gray-300">|</span>
-                    <span>₹{item.sellingPrice?.toLocaleString() || '0.00'}</span>
-                    <span className="text-gray-300">|</span>
-                    <span className="capitalize">{item.brand || 'Generic'}</span>
-                  </div>
+                <div className="text-xs text-gray-400 flex items-center space-x-1.5 truncate mt-0.5">
+                  <span>₹{item.costPrice?.toFixed(2) || '0.00'}</span>
+                  <span className="text-gray-300">|</span>
+                  <span>₹{item.sellingPrice?.toLocaleString() || '0.00'}</span>
+                  <span className="text-gray-300">|</span>
+                  <span className="capitalize">{item.brand || 'Generic'}</span>
                 </div>
               </div>
 
