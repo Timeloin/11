@@ -682,8 +682,10 @@ export default function App() {
           </div>
         )}
 
-        {/* Header */}
-        <Header currentTeam={currentTeam} session={session} onLogout={handleLogout} />
+        {/* Header (hidden on Items and Transactions pages) */}
+        {activeTab !== 'items' && activeTab !== 'transactions' && (
+          <Header currentTeam={currentTeam} session={session} onLogout={handleLogout} />
+        )}
 
         {/* Home Metric Banner */}
         {activeTab === 'home' && (
