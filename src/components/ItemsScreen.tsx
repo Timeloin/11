@@ -173,7 +173,7 @@ export const ItemsScreen: React.FC<ItemsScreenProps> = ({
       </div>
 
       {/* Search Bar with integrated Barcode Scan Icon */}
-      <div className="relative flex items-center bg-[#f0f2f5] rounded-2xl px-3.5 py-2.5 transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 border border-transparent">
+      <div className="relative flex items-center bg-white rounded-2xl px-3.5 py-2.5 transition-all border-2 border-blue-500 shadow-xs focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-500/20">
         <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
         <input
           type="text"
