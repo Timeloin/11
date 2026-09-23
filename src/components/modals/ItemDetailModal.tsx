@@ -118,15 +118,14 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                 <span className="text-[11px] font-mono uppercase bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-md">
                   {item.sku}
                 </span>
-                {isLowStock ? (
-                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[11px] font-bold">
-                    <AlertTriangle className="w-3 h-3" />
-                    <span>Low Stock</span>
-                  </span>
-                ) : (
+                {item.totalStock > 0 ? (
                   <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[11px] font-bold">
                     <CheckCircle2 className="w-3 h-3" />
                     <span>In Stock</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[11px] font-bold">
+                    <span>Out of Stock</span>
                   </span>
                 )}
               </>
@@ -410,11 +409,6 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                     </span>
                   </div>
                 ))}
-              </div>
-
-              <div className="text-[11px] text-gray-500 pt-1 flex justify-between">
-                <span>Minimum Alert Threshold:</span>
-                <span className="font-bold text-gray-800">{item.minStock} {item.unit}</span>
               </div>
             </div>
 

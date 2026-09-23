@@ -13,7 +13,6 @@ import { BarcodeScannerModal } from '@/components/modals/BarcodeScannerModal';
 import { StockActionModal } from '@/components/modals/StockActionModal';
 import { InviteMemberModal } from '@/components/modals/InviteMemberModal';
 import { ItemDetailModal } from '@/components/modals/ItemDetailModal';
-import { ShortagesModal } from '@/components/modals/ShortagesModal';
 import { CsvImportModal } from '@/components/modals/CsvImportModal';
 import { LoginScreen } from '@/components/LoginScreen';
 import { IItem, ILocation, IStockTransaction, ITeam, ITeamMember, TransactionType, UserSession } from '@/types';
@@ -50,13 +49,6 @@ export default function App() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
-  const [shortagesModalConfig, setShortagesModalConfig] = useState<{
-    isOpen: boolean;
-    mode: 'current' | 'by_date';
-  }>({
-    isOpen: false,
-    mode: 'current',
-  });
   const [stockModalConfig, setStockModalConfig] = useState<{
     isOpen: boolean;
     type: TransactionType;
@@ -723,10 +715,8 @@ export default function App() {
               onOpenStockOut={() => openStockModal('stock_out')}
               onOpenMoveStock={() => openStockModal('move')}
               onOpenAdjustStock={() => openStockModal('adjust')}
-              onOpenShortages={() => setShortagesModalConfig({ isOpen: true, mode: 'current' })}
               onOpenInventoryCount={() => openStockModal('adjust')}
               onOpenInviteMembers={() => setIsInviteOpen(true)}
-              onOpenPastQuantity={() => setShortagesModalConfig({ isOpen: true, mode: 'by_date' })}
               onOpenBarcodeLabels={() => alert('Barcode Label Generator: Ready for thermal printer export!')}
               onOpenPurchases={() => openStockModal('purchase')}
               onOpenSales={() => openStockModal('sale')}
@@ -748,6 +738,7 @@ export default function App() {
               onSelectItem={(item) => setSelectedItemForDetail(item)}
               onStockInItem={(item) => openStockModal('stock_in', item)}
               onStockOutItem={(item) => openStockModal('stock_out', item)}
+              onOpenScanner={() => setIsScannerOpen(true)}
             />
           )}
 
@@ -840,14 +831,6 @@ export default function App() {
           onInvite={handleAddMember}
         />
 
-        <ShortagesModal
-          isOpen={shortagesModalConfig.isOpen}
-          onClose={() => setShortagesModalConfig((prev) => ({ ...prev, isOpen: false }))}
-          items={items}
-          transactions={transactions}
-          initialMode={shortagesModalConfig.mode}
-          onStockInItem={(item) => openStockModal('stock_in', item)}
-        />
 
         <CsvImportModal
           isOpen={isCsvImportOpen}

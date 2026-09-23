@@ -7,15 +7,13 @@ import {
   ArrowUp, 
   ArrowRightLeft, 
   Sliders, 
-  Gauge, 
   Binary, 
   UserPlus, 
-  History, 
   Printer, 
   ShoppingBag, 
-  Receipt,
-  ChevronRight,
-  Barcode
+  Receipt, 
+  ChevronRight, 
+  Barcode 
 } from 'lucide-react';
 import { IItem, IStockTransaction, UserSession } from '@/types';
 import { hasPermission } from '@/lib/permissions';
@@ -30,10 +28,8 @@ interface HomeScreenProps {
   onOpenStockOut: () => void;
   onOpenMoveStock: () => void;
   onOpenAdjustStock: () => void;
-  onOpenShortages: () => void;
   onOpenInventoryCount: () => void;
   onOpenInviteMembers: () => void;
-  onOpenPastQuantity: () => void;
   onOpenBarcodeLabels: () => void;
   onOpenPurchases: () => void;
   onOpenSales: () => void;
@@ -49,10 +45,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenStockOut,
   onOpenMoveStock,
   onOpenAdjustStock,
-  onOpenShortages,
   onOpenInventoryCount,
   onOpenInviteMembers,
-  onOpenPastQuantity,
   onOpenBarcodeLabels,
   onOpenPurchases,
   onOpenSales,
@@ -172,22 +166,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       )}
 
-      {/* Group: Low Stock Alerts */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
-        <h2 className="text-base font-bold text-gray-900">Low Stock Alerts</h2>
-        <button
-          onClick={onOpenShortages}
-          className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600">
-              <Gauge className="w-4 h-4" />
-            </div>
-            <span className="text-sm font-semibold text-gray-900">View Shortages</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
-      </div>
+
 
       {/* Group: Inventory Count */}
       {(hasPermission(session, 'canAdjustStock') || hasPermission(session, 'canInventoryCount')) && (
@@ -227,22 +206,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       )}
 
-      {/* Group: Past Quantity */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">
-        <h2 className="text-base font-bold text-gray-900">Past Quantity</h2>
-        <button
-          onClick={onOpenPastQuantity}
-          className="w-full flex items-center justify-between py-2 text-left group active:scale-99 transition-all"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
-              <History className="w-4 h-4" />
-            </div>
-            <span className="text-sm font-semibold text-gray-900">View Stock by Date</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
-        </button>
-      </div>
+
 
       {/* Group: Barcode Labels */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3">

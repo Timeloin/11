@@ -1,217 +1,426 @@
-import React, { useState } from 'react';
-import { Search, Plus, AlertTriangle, ArrowDown, ArrowUp, Barcode, ChevronRight, PackageCheck } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { 
+  Search, 
+  Plus, 
+  Scan, 
+  ChevronDown, 
+  ArrowUpDown, 
+  Check, 
+  Package, 
+  ChevronRight,
+  ChevronUp
+} from 'lucide-react';
 import { IItem, UserSession } from '@/types';
 import { hasPermission } from '@/lib/permissions';
+
+type GroupByOption = 'none' | 'name' | 'cost' | 'price' | 'brand';
 
 interface ItemsScreenProps {
   session?: UserSession | null;
   items: IItem[];
-  categories: string[];
-  brands: string[];
+  categories?: string[];
+  brands?: string[];
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onOpenNewItem: () => void;
   onSelectItem: (item: IItem) => void;
-  onStockInItem: (item: IItem) => void;
-  onStockOutItem: (item: IItem) => void;
+  onStockInItem?: (item: IItem) => void;
+  onStockOutItem?: (item: IItem) => void;
+  onOpenScanner?: () => void;
 }
+
+const BADGE_COLORS = [
+  'bg-rose-100 text-rose-600',
+  'bg-purple-100 text-purple-600',
+  'bg-blue-100 text-blue-600',
+  'bg-emerald-100 text-emerald-600',
+  'bg-amber-100 text-amber-600',
+  'bg-indigo-100 text-indigo-600',
+  'bg-cyan-100 text-cyan-600',
+];
 
 export const ItemsScreen: React.FC<ItemsScreenProps> = ({
   session,
   items,
-  categories,
-  brands,
   searchQuery,
   onSearchChange,
   onOpenNewItem,
   onSelectItem,
-  onStockInItem,
-  onStockOutItem,
+  onOpenScanner,
 }) => {
-  const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [groupBy, setGroupBy] = useState<GroupByOption>('none');
+  const [isGroupByModalOpen, setIsGroupByModalOpen] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
-  const shortageCount = items.filter((item) => item.totalStock <= item.minStock).length;
+  // 1. Filter items by search query and "In stock" toggle
+  const filteredItems = useMemo(() => {
+    let result = items.filter((item) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (item.name || '').toLowerCase().includes(q) ||
+        (item.sku || '').toLowerCase().includes(q) ||
+        (item.brand || '').toLowerCase().includes(q) ||
+        (item.category || '').toLowerCase().includes(q) ||
+        (item.barcodes || []).some((b) => b.includes(q));
 
-  const filteredItems = items.filter((item) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.barcodes.some((b) => b.includes(searchQuery));
+      const matchesStock = inStockOnly ? (Number(item.totalStock) || 0) > 0 : true;
 
-    let matchesFilter = true;
-    if (selectedFilter === 'shortages') {
-      matchesFilter = item.totalStock <= item.minStock;
-    } else if (selectedFilter !== 'all') {
-      matchesFilter = item.category.toLowerCase() === selectedFilter.toLowerCase();
+      return matchesSearch && matchesStock;
+    });
+
+    // Sort order
+    result.sort((a, b) => {
+      if (sortOrder === 'asc') {
+        return (a.name || '').localeCompare(b.name || '');
+      } else {
+        return (b.name || '').localeCompare(a.name || '');
+      }
+    });
+
+    return result;
+  }, [items, searchQuery, inStockOnly, sortOrder]);
+
+  // Total stock across filtered items for percentage calculation
+  const totalStockCount = useMemo(() => {
+    return filteredItems.reduce((acc, i) => acc + (Number(i.totalStock) || 0), 0) || 1;
+  }, [filteredItems]);
+
+  // 2. Compute Bundled / Grouped items when groupBy !== 'none'
+  const groupedBundles = useMemo(() => {
+    if (groupBy === 'none') return [];
+
+    const map = new Map<string, IItem[]>();
+
+    for (const item of filteredItems) {
+      let groupKey = 'Other';
+      if (groupBy === 'brand') {
+        groupKey = (item.brand || 'Generic').trim();
+      } else if (groupBy === 'name') {
+        const firstWord = (item.name || 'Untitled').trim().split(/\s+/)[0];
+        groupKey = firstWord || 'Untitled';
+      } else if (groupBy === 'cost') {
+        groupKey = `Cost: ₹${(item.costPrice || 0).toLocaleString()}`;
+      } else if (groupBy === 'price') {
+        groupKey = `Price: ₹${(item.sellingPrice || 0).toLocaleString()}`;
+      }
+
+      if (!map.has(groupKey)) {
+        map.set(groupKey, []);
+      }
+      map.get(groupKey)!.push(item);
     }
 
-    return matchesSearch && matchesFilter;
-  });
+    const bundles = Array.from(map.entries()).map(([title, groupItems], idx) => {
+      const totalStock = groupItems.reduce((acc, i) => acc + (Number(i.totalStock) || 0), 0);
+      const percent = Math.max(1, Math.round((totalStock / totalStockCount) * 100));
+      return {
+        id: title,
+        title,
+        items: groupItems,
+        totalStock,
+        percent: percent > 100 ? 100 : percent,
+        colorClass: BADGE_COLORS[idx % BADGE_COLORS.length],
+      };
+    });
+
+    // Sort bundles alphabetically or by quantity
+    bundles.sort((a, b) => a.title.localeCompare(b.title));
+    return bundles;
+  }, [filteredItems, groupBy, totalStockCount]);
+
+  const toggleGroupExpand = (groupId: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  };
+
+  const getGroupByButtonText = () => {
+    switch (groupBy) {
+      case 'brand':
+        return 'Brand';
+      case 'name':
+        return 'Name';
+      case 'cost':
+        return 'Cost';
+      case 'price':
+        return 'Price';
+      default:
+        return 'Group by';
+    }
+  };
 
   return (
-    <div className="px-4 py-4 space-y-4 pb-24 max-w-md mx-auto">
-      {/* Top Search & Add Item Bar */}
-      <div className="flex items-center space-x-2">
-        <div className="relative flex-1 flex items-center bg-white rounded-2xl border border-gray-100 shadow-xs px-3.5 py-2.5">
-          <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search items, SKU, barcode..."
-            className="w-full text-xs sm:text-sm text-gray-800 placeholder-gray-400 bg-transparent focus:outline-none"
-          />
-        </div>
-        {hasPermission(session, 'canCreateItem') && (
+    <div className="px-4 py-3 space-y-3 pb-24 max-w-md mx-auto">
+      {/* Header: Item List + Add Button */}
+      <div className="flex items-center justify-between pt-1">
+        <div className="w-8" />
+        <h1 className="text-lg font-bold text-gray-900 tracking-tight text-center">Item List</h1>
+        {hasPermission(session, 'canCreateItem') ? (
           <button
             onClick={onOpenNewItem}
-            className="p-3 bg-[#4965fa] hover:bg-blue-600 text-white rounded-2xl shadow-sm transition-transform active:scale-95 shrink-0 flex items-center justify-center"
-            title="Add New Item"
+            className="p-1 text-gray-900 hover:text-blue-600 transition-colors"
+            title="Add Item"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-6 h-6 stroke-[2]" />
+          </button>
+        ) : (
+          <div className="w-8" />
+        )}
+      </div>
+
+      {/* Search Bar with integrated Barcode Scan Icon */}
+      <div className="relative flex items-center bg-[#f0f2f5] rounded-2xl px-3.5 py-2.5 transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 border border-transparent">
+        <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={groupBy !== 'none' ? 'Search item attribute' : 'Search by name, barcode, or attribute'}
+          className="w-full text-xs sm:text-sm text-gray-800 placeholder-gray-400 bg-transparent focus:outline-none"
+        />
+        {onOpenScanner && (
+          <button
+            type="button"
+            onClick={onOpenScanner}
+            className="text-gray-500 hover:text-gray-800 ml-2 shrink-0 p-0.5"
+            title="Scan Barcode"
+          >
+            <Scan className="w-4 h-4" />
           </button>
         )}
       </div>
 
-      {/* Category & Shortage Filter Pills */}
-      <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar py-1">
-        <button
-          onClick={() => setSelectedFilter('all')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors ${
-            selectedFilter === 'all'
-              ? 'bg-[#4965fa] text-white shadow-xs'
-              : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-          }`}
-        >
-          All Items ({items.length})
-        </button>
-
-        {/* Shortages Filter Pill */}
-        <button
-          onClick={() => setSelectedFilter('shortages')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors flex items-center space-x-1 ${
-            selectedFilter === 'shortages'
-              ? 'bg-amber-500 text-white shadow-xs'
-              : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
-          }`}
-        >
-          <span>⚠️ Shortages ({shortageCount})</span>
-        </button>
-
-        {categories.map((cat) => (
+      {/* Top Filter Buttons: Group by ˅ | In stock | ⇅ Sort */}
+      <div className="flex items-center justify-between pt-0.5 pb-1">
+        <div className="flex items-center space-x-2">
+          {/* Group by Dropdown Button */}
           <button
-            key={cat}
-            onClick={() => setSelectedFilter(cat)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize whitespace-nowrap transition-colors ${
-              selectedFilter === cat
-                ? 'bg-[#4965fa] text-white shadow-xs'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+            onClick={() => setIsGroupByModalOpen(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors border shadow-2xs ${
+              groupBy !== 'none'
+                ? 'border-blue-500 text-blue-600 bg-blue-50/70 font-bold'
+                : 'border-gray-200 text-gray-700 bg-white hover:bg-gray-50'
             }`}
           >
-            {cat}
+            <span>{getGroupByButtonText()}</span>
+            <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
           </button>
-        ))}
+
+          {/* In stock Filter Toggle */}
+          <button
+            onClick={() => setInStockOnly(!inStockOnly)}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors border shadow-2xs ${
+              inStockOnly
+                ? 'border-blue-500 text-blue-600 bg-blue-50/70 font-bold'
+                : 'border-gray-200 text-gray-700 bg-white hover:bg-gray-50'
+            }`}
+          >
+            In stock
+          </button>
+        </div>
+
+        {/* Sort Toggle Button */}
+        <button
+          onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+          className="p-1.5 text-gray-500 hover:text-gray-900 transition-colors"
+          title={`Sort order: ${sortOrder === 'asc' ? 'A-Z' : 'Z-A'}`}
+        >
+          <ArrowUpDown className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Clean Text-Driven Product Cards (No Images) */}
-      <div className="space-y-2.5">
-        {filteredItems.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400">
-            <Barcode className="w-10 h-10 mx-auto mb-2 opacity-40 text-gray-400" />
-            <p className="text-sm font-medium">No items found</p>
-            <p className="text-xs text-gray-400 mt-1">Try a different search or add a new item.</p>
-          </div>
-        ) : (
-          filteredItems.map((item) => {
-            const isLowStock = item.totalStock <= item.minStock;
+      {/* Main Content: Grouped Bundles or Clean Flat List */}
+      {filteredItems.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 mt-2">
+          <Package className="w-10 h-10 mx-auto mb-2 opacity-30 text-gray-400" />
+          <p className="text-sm font-semibold text-gray-700">No items found</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {inStockOnly ? 'No in-stock items match your filter.' : 'Try a different search or add a new item.'}
+          </p>
+        </div>
+      ) : groupBy !== 'none' ? (
+        /* ---------------- GROUPED BUNDLE CARDS (Image 3) ---------------- */
+        <div className="space-y-3 pt-1">
+          {groupedBundles.map((bundle) => {
+            const isExpanded = !!expandedGroups[bundle.id];
+
             return (
               <div
-                key={item._id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 space-y-3 transition-all hover:border-blue-200 hover:shadow-sm"
+                key={bundle.id}
+                className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden transition-all hover:border-gray-200"
               >
-                {/* Clickable Header & Info to view full details */}
+                {/* Bundle Card Header */}
                 <div
-                  onClick={() => onSelectItem(item)}
-                  className="cursor-pointer group select-none"
+                  onClick={() => toggleGroupExpand(bundle.id)}
+                  className="p-4 cursor-pointer select-none space-y-3.5"
                 >
+                  {/* Title & % Tag */}
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700">
-                        {item.brand}
-                      </span>
-                      <span className="text-[11px] text-gray-400 font-mono">
-                        {item.sku}
-                      </span>
-                    </div>
-                    {isLowStock ? (
-                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold">
-                        <AlertTriangle className="w-3 h-3" />
-                        <span>Low Stock</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-emerald-600 font-bold">In Stock</span>
-                    )}
+                    <h2 className="text-base font-bold text-gray-900 capitalize tracking-tight">
+                      {bundle.title}
+                    </h2>
+                    <span
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${bundle.colorClass}`}
+                    >
+                      {bundle.percent}%
+                    </span>
                   </div>
 
-                  <div className="flex items-start justify-between mt-2">
-                    <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors leading-snug pr-2">
-                      {item.name}
-                    </h3>
-                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
-                  </div>
-
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-blue-600 font-extrabold text-sm">₹{item.sellingPrice}</span>
-                      {hasPermission(session, 'canViewCostPrice') && (
-                        <span className="text-gray-400 text-[11px]">Cost: ₹{item.costPrice}</span>
-                      )}
+                  {/* Overlapping Circles & Stats */}
+                  <div className="flex items-center justify-between pt-1">
+                    {/* Overlapping Circular Discs */}
+                    <div className="flex -space-x-4 items-center">
+                      <div className="w-9 h-9 rounded-full bg-gray-200 border-2 border-white shadow-2xs" />
+                      <div className="w-9 h-9 rounded-full bg-gray-300 border-2 border-white shadow-2xs" />
+                      <div className="w-9 h-9 rounded-full bg-gray-400 border-2 border-white shadow-2xs" />
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-black text-gray-900">
-                        {item.totalStock} <span className="text-[10px] font-normal text-gray-500">{item.unit}</span>
-                      </span>
+
+                    {/* Stats: Item count & Total Quantity */}
+                    <div className="flex items-center space-x-8 pr-2">
+                      <div className="text-center">
+                        <div className="text-base font-black text-gray-900 leading-tight">
+                          {bundle.items.length}
+                        </div>
+                        <div className="text-[11px] text-gray-400 font-medium">Item</div>
+                      </div>
+
+                      <div className="text-center">
+                        <div className="text-base font-black text-gray-900 leading-tight">
+                          {bundle.totalStock}
+                        </div>
+                        <div className="text-[11px] text-gray-400 font-medium">Quantity</div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Quick Stock Action Controls */}
-                <div className="pt-2 border-t border-gray-50 flex items-center justify-between">
-                  <div className="text-[11px] text-gray-500 truncate max-w-[170px]">
-                    {item.stockByLocation.map((loc) => loc.locationName + ': ' + loc.quantity).join(', ')}
+                {/* Expanded Items List inside the bundle */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100 bg-gray-50/50 divide-y divide-gray-100 animate-in fade-in duration-150">
+                    {bundle.items.map((item) => (
+                      <div
+                        key={item._id}
+                        onClick={() => onSelectItem(item)}
+                        className="p-3 pl-4 flex items-center justify-between hover:bg-white cursor-pointer transition-colors"
+                      >
+                        <div className="min-w-0 pr-3">
+                          <div className="text-xs font-bold text-gray-900 truncate">
+                            {item.name}
+                          </div>
+                          <div className="text-[11px] text-gray-400 mt-0.5 truncate">
+                            ₹{item.costPrice?.toFixed(2) || '0.00'} | ₹{item.sellingPrice?.toLocaleString() || '0.00'} | {item.brand || 'Generic'}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <span className="text-xs font-bold text-blue-600">
+                            {item.totalStock}
+                          </span>
+                          <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center space-x-1.5 shrink-0">
-                    {hasPermission(session, 'canStockIn') && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onStockInItem(item);
-                        }}
-                        className="flex items-center space-x-1 px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors active:scale-95"
-                      >
-                        <ArrowDown className="w-3 h-3" />
-                        <span>In</span>
-                      </button>
-                    )}
-                    {hasPermission(session, 'canStockOut') && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onStockOutItem(item);
-                        }}
-                        className="flex items-center space-x-1 px-2.5 py-1 bg-red-50 text-red-700 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors active:scale-95"
-                      >
-                        <ArrowUp className="w-3 h-3" />
-                        <span>Out</span>
-                      </button>
-                    )}
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* ---------------- FLAT LIST VIEW (Image 1) ---------------- */
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs divide-y divide-gray-100 overflow-hidden">
+          {filteredItems.map((item) => (
+            <div
+              key={item._id}
+              onClick={() => onSelectItem(item)}
+              className="flex items-center justify-between p-3.5 hover:bg-gray-50/60 cursor-pointer transition-colors active:bg-gray-100/60"
+            >
+              <div className="flex items-center space-x-3.5 min-w-0">
+                {/* Rounded Placeholder square as in reference */}
+                <div className="w-12 h-12 rounded-xl bg-gray-200/90 shrink-0 flex items-center justify-center">
+                  <div className="w-4 h-4 rounded-sm bg-gray-300/80" />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 truncate">
+                    {item.name}
+                  </div>
+                  <div className="text-xs text-gray-400 flex items-center space-x-1.5 truncate mt-0.5">
+                    <span>₹{item.costPrice?.toFixed(2) || '0.00'}</span>
+                    <span className="text-gray-300">|</span>
+                    <span>₹{item.sellingPrice?.toLocaleString() || '0.00'}</span>
+                    <span className="text-gray-300">|</span>
+                    <span className="capitalize">{item.brand || 'Generic'}</span>
                   </div>
                 </div>
               </div>
-            );
-          })
-        )}
-      </div>
+
+              {/* Bold Blue Quantity Number on Far Right */}
+              <div className="text-right pl-3 shrink-0">
+                <span className="text-base font-bold text-blue-600">
+                  {item.totalStock}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ---------------- "GROUP BY" BOTTOM SHEET MODAL (Image 2) ---------------- */}
+      {isGroupByModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-2xs animate-in fade-in duration-200">
+          {/* Backdrop click to dismiss */}
+          <div
+            className="absolute inset-0"
+            onClick={() => setIsGroupByModalOpen(false)}
+          />
+
+          {/* Bottom Sheet */}
+          <div className="relative w-full max-w-md bg-white rounded-t-3xl p-5 pb-8 space-y-4 shadow-2xl z-10 animate-in slide-in-from-bottom duration-200">
+            {/* Drag Handle Bar */}
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto" />
+
+            {/* Modal Title */}
+            <h2 className="text-lg font-bold text-gray-900">Group by</h2>
+
+            {/* Options List */}
+            <div className="space-y-1 pt-1">
+              {[
+                { key: 'none', label: 'None' },
+                { key: 'name', label: 'Name' },
+                { key: 'cost', label: 'Cost' },
+                { key: 'price', label: 'Price' },
+                { key: 'brand', label: 'Brand' },
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => {
+                    setGroupBy(opt.key as GroupByOption);
+                    setIsGroupByModalOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between py-3 px-2 text-left hover:bg-gray-50 rounded-xl transition-colors group"
+                >
+                  <span
+                    className={`text-sm ${
+                      groupBy === opt.key ? 'font-bold text-gray-900' : 'text-gray-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </span>
+                  {groupBy === opt.key && (
+                    <Check className="w-5 h-5 text-blue-600 stroke-[2.5]" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
