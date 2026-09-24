@@ -177,17 +177,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setAddingLoc(false);
   };
 
-  const handleConfirmDeleteMember = async () => {
+  const handleConfirmDeleteMember = () => {
     if (!deletingMember || !onDeleteMember) return;
-    setIsDeletingMember(true);
-    try {
-      await onDeleteMember(deletingMember._id);
-      setDeletingMember(null);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsDeletingMember(false);
-    }
+    const memberId = deletingMember._id;
+    setDeletingMember(null);
+    onDeleteMember(memberId);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

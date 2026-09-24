@@ -61,23 +61,99 @@ export default function App() {
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<IItem | null>(null);
   const [scannedBarcodeForNewItem, setScannedBarcodeForNewItem] = useState<string | undefined>();
 
-  // Restore session from localStorage on mount
+  const CACHE_KEYS = {
+    SESSION: 'inventory_session',
+    TOKEN: 'inventory_token',
+    ITEMS: 'inventory_cache_items',
+    METRICS: 'inventory_cache_metrics',
+    TRANSACTIONS: 'inventory_cache_transactions',
+    LOCATIONS: 'inventory_cache_locations',
+    MEMBERS: 'inventory_cache_members',
+    CATEGORIES: 'inventory_cache_categories',
+    BRANDS: 'inventory_cache_brands',
+    TEAMS: 'inventory_cache_teams',
+    CURRENT_TEAM: 'inventory_cache_current_team',
+  };
+
+  const saveLocalCache = (key: string, data: any) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {}
+  };
+
+  // Restore session & full cached inventory data from localStorage on mount (Instant 0ms Load)
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('inventory_session');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setSession(parsed);
-      }
+      const saved = localStorage.getItem(CACHE_KEYS.SESSION);
+      if (saved) setSession(JSON.parse(saved));
+
+      const cachedItems = localStorage.getItem(CACHE_KEYS.ITEMS);
+      if (cachedItems) setItems(JSON.parse(cachedItems));
+
+      const cachedMetrics = localStorage.getItem(CACHE_KEYS.METRICS);
+      if (cachedMetrics) setMetrics(JSON.parse(cachedMetrics));
+
+      const cachedTxns = localStorage.getItem(CACHE_KEYS.TRANSACTIONS);
+      if (cachedTxns) setTransactions(JSON.parse(cachedTxns));
+
+      const cachedTeams = localStorage.getItem(CACHE_KEYS.TEAMS);
+      if (cachedTeams) setTeams(JSON.parse(cachedTeams));
+
+      const cachedCurrTeam = localStorage.getItem(CACHE_KEYS.CURRENT_TEAM);
+      if (cachedCurrTeam) setCurrentTeam(JSON.parse(cachedCurrTeam));
+
+      const cachedLocs = localStorage.getItem(CACHE_KEYS.LOCATIONS);
+      if (cachedLocs) setLocations(JSON.parse(cachedLocs));
+
+      const cachedMembers = localStorage.getItem(CACHE_KEYS.MEMBERS);
+      if (cachedMembers) setMembers(JSON.parse(cachedMembers));
+
+      const cachedCategories = localStorage.getItem(CACHE_KEYS.CATEGORIES);
+      if (cachedCategories) setCategories(JSON.parse(cachedCategories));
+
+      const cachedBrands = localStorage.getItem(CACHE_KEYS.BRANDS);
+      if (cachedBrands) setBrands(JSON.parse(cachedBrands));
     } catch (e) {}
     setIsAuthChecking(false);
   }, []);
 
+  // Synchronize state changes to local persistent cache
+  useEffect(() => {
+    if (items.length > 0) saveLocalCache(CACHE_KEYS.ITEMS, items);
+  }, [items]);
+
+  useEffect(() => {
+    if (transactions.length > 0) saveLocalCache(CACHE_KEYS.TRANSACTIONS, transactions);
+  }, [transactions]);
+
+  useEffect(() => {
+    if (locations.length > 0) saveLocalCache(CACHE_KEYS.LOCATIONS, locations);
+  }, [locations]);
+
+  useEffect(() => {
+    if (members.length > 0) saveLocalCache(CACHE_KEYS.MEMBERS, members);
+  }, [members]);
+
+  useEffect(() => {
+    if (teams.length > 0) saveLocalCache(CACHE_KEYS.TEAMS, teams);
+  }, [teams]);
+
+  useEffect(() => {
+    if (currentTeam) saveLocalCache(CACHE_KEYS.CURRENT_TEAM, currentTeam);
+  }, [currentTeam]);
+
+  useEffect(() => {
+    if (metrics.totalItems > 0 || metrics.totalInventoryValue > 0) {
+      saveLocalCache(CACHE_KEYS.METRICS, metrics);
+    }
+  }, [metrics]);
+
   const handleLoginSuccess = (userSession: UserSession, token: string) => {
     setSession(userSession);
+    saveLocalCache(CACHE_KEYS.SESSION, userSession);
     try {
-      localStorage.setItem('inventory_session', JSON.stringify(userSession));
-      localStorage.setItem('inventory_token', token);
+      localStorage.setItem(CACHE_KEYS.TOKEN, token);
     } catch (e) {}
   };
 
@@ -86,6 +162,13 @@ export default function App() {
     try {
       localStorage.removeItem('inventory_session');
       localStorage.removeItem('inventory_token');
+      localStorage.removeItem('inventory_cache_items');
+      localStorage.removeItem('inventory_cache_metrics');
+      localStorage.removeItem('inventory_cache_transactions');
+      localStorage.removeItem('inventory_cache_locations');
+      localStorage.removeItem('inventory_cache_members');
+      localStorage.removeItem('inventory_cache_teams');
+      localStorage.removeItem('inventory_cache_current_team');
     } catch (e) {}
   }, []);
 
@@ -98,7 +181,7 @@ export default function App() {
     }, 2500);
   };
 
-  // Fetch shop inventory data
+  // Fetch shop inventory data in background (SWR pattern)
   const loadData = useCallback(async () => {
     if (!session) return;
     try {
@@ -139,9 +222,29 @@ export default function App() {
         if (syncRes.metrics) setMetrics(syncRes.metrics);
         if (syncRes.categories) setCategories(syncRes.categories);
         if (syncRes.brands) setBrands(syncRes.brands);
-        if (syncRes.items) setItems(syncRes.items);
+        if (syncRes.items) {
+          setItems((currentItems) => {
+            const pendingTempItems = currentItems.filter((i) => i._id.startsWith('temp_'));
+            const trulyPending = pendingTempItems.filter(
+              (temp) => !syncRes.items.some((serverItem: IItem) => serverItem.sku === temp.sku)
+            );
+            return [...trulyPending, ...syncRes.items];
+          });
+        }
         if (syncRes.locations) setLocations(syncRes.locations);
-        if (syncRes.transactions) setTransactions(syncRes.transactions);
+        if (syncRes.transactions) {
+          setTransactions((currentTxns) => {
+            const pendingTempTxns = currentTxns.filter((t) => t._id.startsWith('temp_'));
+            const trulyPending = pendingTempTxns.filter(
+              (temp) => !syncRes.transactions.some((st: IStockTransaction) => st.referenceNo === temp.referenceNo)
+            );
+            const locallyUndoneIds = new Set(currentTxns.filter((t) => t.isUndone).map((t) => t._id));
+            const mergedServerTxns = syncRes.transactions.map((t: IStockTransaction) =>
+              locallyUndoneIds.has(t._id) ? { ...t, isUndone: true } : t
+            );
+            return [...trulyPending, ...mergedServerTxns];
+          });
+        }
         if (syncRes.members) setMembers(syncRes.members);
       }
     } catch (e) {
@@ -413,6 +516,25 @@ export default function App() {
       setItems((prev) =>
         prev.map((i) => (i._id === targetItem._id ? { ...i, totalStock: newTotal } : i))
       );
+
+      // Optimistically update metrics in 0ms
+      setMetrics((prev) => {
+        let stockIn = prev.stockInToday;
+        let stockOut = prev.stockOutToday;
+        const diffStock = newTotal - targetItem.totalStock;
+        const valChange = diffStock * (targetItem.costPrice || 0);
+        if (data.type === 'stock_in' || data.type === 'purchase') {
+          stockIn += qtyChange;
+        } else if (data.type === 'stock_out' || data.type === 'sale') {
+          stockOut += qtyChange;
+        }
+        return {
+          ...prev,
+          stockInToday: stockIn,
+          stockOutToday: stockOut,
+          totalInventoryValue: Math.max(0, prev.totalInventoryValue + valChange),
+        };
+      });
     }
 
     const optimisticTxn: IStockTransaction = {
@@ -494,6 +616,7 @@ export default function App() {
       name: memberData.name,
       email: memberData.email,
       role: memberData.role || 'sales',
+      customPermissions: memberData.customPermissions,
       status: 'active',
       joinedAt: new Date().toISOString(),
     };
@@ -579,55 +702,94 @@ export default function App() {
     showToast('Stock sheet exported to CSV!');
   };
 
-  const handleUndoTransaction = async (txn: IStockTransaction) => {
+  const handleUndoTransaction = (txn: IStockTransaction) => {
     const operatorName = session?.userName || session?.name || 'Main Admin';
     const userId = session?.userId || 'user_admin';
 
-    try {
-      const res = await fetch('/api/transactions/undo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transactionId: txn._id,
-          operatorName,
-          userId,
-        }),
-      });
+    // 1. Instantly mark transaction as undone in UI (0ms)
+    setTransactions((prev) =>
+      prev.map((t) =>
+        t._id === txn._id
+          ? { ...t, isUndone: true, undoneAt: new Date().toISOString(), undoneBy: operatorName }
+          : t
+      )
+    );
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to undo transaction');
-      }
-
-      // Mark transaction as undone in state
-      setTransactions((prev) =>
-        prev.map((t) =>
-          t._id === txn._id
-            ? { ...t, isUndone: true, undoneAt: new Date().toISOString(), undoneBy: operatorName }
-            : t
-        )
-      );
-
-      // If an item was restored from delete_item
-      if (data.restoredItem) {
+    // 2. Instantly reverse inventory effects in UI (0ms)
+    if (txn.type === 'delete_item') {
+      const restored = txn.snapshotData;
+      if (restored) {
         setItems((prev) => {
-          const exists = prev.some((i) => i._id === data.restoredItem._id);
-          if (exists) {
-            return prev.map((i) => (i._id === data.restoredItem._id ? data.restoredItem : i));
-          } else {
-            return [data.restoredItem, ...prev];
-          }
+          const exists = prev.some((i) => i._id === restored._id);
+          return exists ? prev : [restored, ...prev];
         });
+        setMetrics((prev) => ({
+          ...prev,
+          totalItems: prev.totalItems + 1,
+          totalInventoryValue: prev.totalInventoryValue + ((Number(restored.totalStock) || 0) * (Number(restored.costPrice) || 0)),
+        }));
       }
-
-      showToast('↩️ Transaction undone and restored successfully!');
-      // Sync fresh data from server
-      await loadData();
-    } catch (err: any) {
-      console.error('Undo error:', err);
-      showToast(`❌ ${err.message || 'Error undoing transaction'}`);
-      throw err;
+    } else if (txn.type === 'create_item') {
+      const itemId = txn.items?.[0]?.itemId;
+      if (itemId) {
+        setItems((prev) => prev.filter((i) => i._id !== itemId));
+        setMetrics((prev) => ({
+          ...prev,
+          totalItems: Math.max(0, prev.totalItems - 1),
+        }));
+      }
+    } else if (txn.type === 'stock_in' || txn.type === 'purchase') {
+      const qty = txn.totalQuantity || 0;
+      const itemId = txn.items?.[0]?.itemId;
+      if (itemId) {
+        setItems((prev) =>
+          prev.map((i) => (i._id === itemId ? { ...i, totalStock: Math.max(0, i.totalStock - qty) } : i))
+        );
+        setMetrics((prev) => ({
+          ...prev,
+          stockInToday: Math.max(0, prev.stockInToday - qty),
+        }));
+      }
+    } else if (txn.type === 'stock_out' || txn.type === 'sale') {
+      const qty = txn.totalQuantity || 0;
+      const itemId = txn.items?.[0]?.itemId;
+      if (itemId) {
+        setItems((prev) =>
+          prev.map((i) => (i._id === itemId ? { ...i, totalStock: i.totalStock + qty } : i))
+        );
+        setMetrics((prev) => ({
+          ...prev,
+          stockOutToday: Math.max(0, prev.stockOutToday - qty),
+        }));
+      }
     }
+
+    showToast('↩️ Transaction undone & restored instantly!');
+
+    // 3. Database write happens asynchronously in the background (3-4 seconds later)
+    fetch('/api/transactions/undo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transactionId: txn._id,
+        operatorName,
+        userId,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) {
+          console.error('Background undo DB error:', data.error);
+        } else if (data.restoredItem) {
+          // Sync real DB object if needed
+          setItems((prev) =>
+            prev.map((i) => (i._id === data.restoredItem._id ? data.restoredItem : i))
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('Background undo network error:', err);
+      });
   };
 
   const openStockModal = (type: TransactionType, item?: IItem | null) => {

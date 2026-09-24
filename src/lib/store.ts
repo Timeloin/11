@@ -1519,9 +1519,9 @@ export class InventoryStore {
   }
 
   // Metrics
-  static async getDashboardMetrics(teamId: string) {
-    const items = await this.getItems(teamId);
-    const txns = await this.getTransactions(teamId);
+  static async getDashboardMetrics(teamId: string, preloadedItems?: IItem[], preloadedTxns?: IStockTransaction[]) {
+    const items = preloadedItems || await this.getItems(teamId);
+    const txns = preloadedTxns || await this.getTransactions(teamId);
     
     const today = new Date().toISOString().split('T')[0];
     const todayTxns = txns.filter(t => t.createdAt && new Date(t.createdAt).toISOString().startsWith(today));

@@ -142,30 +142,24 @@ export const EditMemberModal: React.FC<EditMemberModalProps> = ({
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email) return;
-    setLoading(true);
-    try {
-      const assignedRole: Role = perms.isReadOnly
-        ? 'viewer'
-        : perms.canCreateItem && perms.canEditItem
-        ? 'manager'
-        : 'sales';
 
-      await onUpdate(member._id, {
-        name: name.trim(),
-        email: email.trim(),
-        password: password.trim() || member.password,
-        role: assignedRole,
-        customPermissions: perms,
-      });
-      onClose();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    const assignedRole: Role = perms.isReadOnly
+      ? 'viewer'
+      : perms.canCreateItem && perms.canEditItem
+      ? 'manager'
+      : 'sales';
+
+    onClose();
+    onUpdate(member._id, {
+      name: name.trim(),
+      email: email.trim(),
+      password: password.trim() || member.password,
+      role: assignedRole,
+      customPermissions: perms,
+    });
   };
 
   const permissionList: Array<{

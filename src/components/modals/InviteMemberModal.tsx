@@ -119,30 +119,24 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !password) return;
-    setLoading(true);
-    try {
-      const assignedRole: Role = perms.isReadOnly
-        ? 'viewer'
-        : perms.canCreateItem && perms.canEditItem
-        ? 'manager'
-        : 'sales';
+    
+    const assignedRole: Role = perms.isReadOnly
+      ? 'viewer'
+      : perms.canCreateItem && perms.canEditItem
+      ? 'manager'
+      : 'sales';
 
-      await onInvite({
-        name: name.trim(),
-        email: email.trim(),
-        password: password.trim(),
-        role: assignedRole,
-        customPermissions: perms,
-      });
-      onClose();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    onClose();
+    onInvite({
+      name: name.trim(),
+      email: email.trim(),
+      password: password.trim(),
+      role: assignedRole,
+      customPermissions: perms,
+    });
   };
 
   const permissionList: Array<{

@@ -20,9 +20,8 @@ export async function GET(req: Request) {
       }
     }
 
-    const [teams, metrics, categories, brands, items, locations, transactions, members] = await Promise.all([
+    const [teams, categories, brands, items, locations, transactions, members] = await Promise.all([
       InventoryStore.listTeams(),
-      InventoryStore.getDashboardMetrics(teamId),
       InventoryStore.getCategories(),
       InventoryStore.getBrands(),
       InventoryStore.getItems(teamId),
@@ -30,6 +29,8 @@ export async function GET(req: Request) {
       InventoryStore.getTransactions(teamId, 50),
       InventoryStore.getMembers(teamId),
     ]);
+
+    const metrics = await InventoryStore.getDashboardMetrics(teamId, items, transactions);
 
     return NextResponse.json({
       success: true,

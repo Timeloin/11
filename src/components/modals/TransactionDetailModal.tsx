@@ -147,18 +147,11 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     }
   };
 
-  const handleExecuteUndo = async () => {
+  const handleExecuteUndo = () => {
     if (!onUndo) return;
-    setIsUndoing(true);
-    try {
-      await onUndo(transaction);
-      setIsConfirmingUndo(false);
-      onClose();
-    } catch (e) {
-      console.error('Undo failed:', e);
-    } finally {
-      setIsUndoing(false);
-    }
+    setIsConfirmingUndo(false);
+    onClose();
+    onUndo(transaction);
   };
 
   return (
